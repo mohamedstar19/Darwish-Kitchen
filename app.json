@@ -1,0 +1,63 @@
+{
+  "expo": {
+    "name": "Darwish Kitchen",
+    "slug": "darwish-kitchen",
+    "scheme": "darwishkitchen",
+    "version": "1.0.0",
+    "orientation": "portrait",
+    "icon": "./assets/icon.png",
+    "userInterfaceStyle": "automatic",
+    "splash": {
+      "image": "./assets/splash-icon.png",
+      "resizeMode": "contain",
+      "backgroundColor": "#FFF8F1"
+    },
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.darwish.kitchen"
+    },
+    "android": {
+      "package": "com.darwish.kitchen",
+      "adaptiveIcon": {
+        "backgroundColor": "#C2410C",
+        "foregroundImage": "./assets/android-icon-foreground.png",
+        "backgroundImage": "./assets/android-icon-background.png",
+        "monochromeImage": "./assets/android-icon-monochrome.png"
+      },
+      "predictiveBackGestureEnabled": false
+    },
+    "web": {
+      "output": "single",
+      "favicon": "./assets/favicon.png",
+      "name": "Darwish Kitchen",
+      "shortName": "Darwish Kitchen",
+      "lang": "ar",
+      "themeColor": "#C2410C",
+      "backgroundColor": "#FFF8F1",
+      "description": "وصفات أكل واقتراح أكلة اليوم"
+    },
+    "plugins": [
+      "expo-router",
+      "expo-font",
+      [
+        "expo-localization",
+        {
+          "supportsRTL": true,
+          "forcesRTL": true
+        }
+      ],
+      [
+        "expo-image-picker",
+        {
+          "photosPermission": "نحتاج الصور علشان تختار صورة للوصفة.",
+          "cameraPermission": "نحتاج الكاميرا علشان تصوّر الوصفة.",
+          "microphonePermission": false
+        }
+      ]
+    ],
+    "extra": {
+      "supportsRTL": true,
+      "forcesRTL": true
+    }
+  }
+}
