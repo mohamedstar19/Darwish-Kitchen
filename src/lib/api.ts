@@ -44,18 +44,31 @@ export async function api<T = unknown>(path: string, { method, json, body, type,
   if (json !== undefined) headers['Content-Type'] = 'application/json';
   if (type) headers['Content-Type'] = type;
 
-  let res: Response;
-  try {
-    res = await fetch(API_URL + path, {
+  const send = () =>
+    fetch(API_URL + path, {
       method: method ?? (json !== undefined ? 'POST' : 'GET'),
       headers,
       body: json !== undefined ? JSON.stringify(json) : body,
     });
+  let res: Response;
+  try {
+    res = await send();
   } catch {
     throw new ApiError(0, 'network');
   }
+  let data = res.status === 204 ? {} : await res.json().catch(() => ({}));
+  // A gateway error without our JSON body (Cloudflare/nginx dropped a stale connection) never reached
+  // the API, so sending it again is safe.
+  if (res.status >= 502 && res.status <= 504 && !(data as { error?: string }).error) {
+    await new Promise((r) => setTimeout(r, 700));
+    try {
+      res = await send();
+    } catch {
+      throw new ApiError(0, 'network');
+    }
+    data = res.status === 204 ? {} : await res.json().catch(() => ({}));
+  }
   if (res.status === 204) return undefined as T;
-  const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     // An expired or revoked login: forget it so the app shows the sign-in button again.
     if (res.status === 401 && auth === true) await setAuth(null);
