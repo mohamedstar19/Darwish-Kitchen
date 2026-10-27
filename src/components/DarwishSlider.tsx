@@ -1,44 +1,72 @@
 import { router } from 'expo-router';
 import { useEffect, useMemo, useRef, useState } from 'react';
-import { FlatList, Pressable, StyleSheet, Text, View, type NativeScrollEvent, type NativeSyntheticEvent } from 'react-native';
+import { Animated, PanResponder, Pressable, StyleSheet, Text, View } from 'react-native';
 import { useDarwish } from '../lib/darwish-context';
 import { radius, space, useTheme } from '../theme';
-import { CATEGORY_ICONS, CATEGORY_LABELS_ONE, categoryOf, MEAL_LABELS, type Recipe } from '../types';
+import { CATEGORY_ICONS, CATEGORY_LABELS_ONE, categoryOf, MEAL_LABELS } from '../types';
 import { RecipeImage } from './ui';
 
 const AUTO_MS = 4500;
+const PAUSE_AFTER_SWIPE_MS = 9000;
 const MAX_SLIDES = 8;
 
-/** Slideshow of Darwish recipes (ones with photos first) that advances on its own. */
+/**
+ * Slideshow of Darwish recipes (ones with photos first) that advances on its own.
+ * It shows one slide at a time and fades between them (no horizontal scrolling, which misbehaves
+ * in right-to-left layouts on the web). Swipe to move; in RTL, swiping toward the right goes forward.
+ */
 export function DarwishSlider() {
   const c = useTheme();
   const { recipes } = useDarwish();
-  const [width, setWidth] = useState(0);
   const [index, setIndex] = useState(0);
-  const list = useRef<FlatList<Recipe>>(null);
-  const touching = useRef(false);
+  const fade = useRef(new Animated.Value(1)).current;
+  const pausedUntil = useRef(0);
+  const lastSwipe = useRef(0);
 
   const slides = useMemo(() => [...recipes].sort((a, b) => Number(!!b.image) - Number(!!a.image)).slice(0, MAX_SLIDES), [recipes]);
+  const count = slides.length;
+  const current = slides[index % Math.max(count, 1)];
+
+  const go = (step: number) => {
+    if (count < 2) return;
+    Animated.timing(fade, { toValue: 0, duration: 160, useNativeDriver: false }).start(() => {
+      setIndex((i) => (i + step + count) % count);
+      Animated.timing(fade, { toValue: 1, duration: 260, useNativeDriver: false }).start();
+    });
+  };
+  const goRef = useRef(go);
+  goRef.current = go;
 
   useEffect(() => {
-    if (slides.length < 2 || !width) return;
+    if (count < 2) return;
     const t = setInterval(() => {
-      if (touching.current) return;
-      setIndex((i) => {
-        const next = (i + 1) % slides.length;
-        list.current?.scrollToOffset({ offset: next * width, animated: true });
-        return next;
-      });
+      if (Date.now() >= pausedUntil.current) goRef.current(1);
     }, AUTO_MS);
     return () => clearInterval(t);
-  }, [slides.length, width]);
+  }, [count]);
 
-  const onScrollEnd = (e: NativeSyntheticEvent<NativeScrollEvent>) => {
-    if (width) setIndex(Math.round(Math.abs(e.nativeEvent.contentOffset.x) / width) % Math.max(slides.length, 1));
-    touching.current = false;
-  };
+  useEffect(() => {
+    if (index >= count && count) setIndex(0);
+  }, [index, count]);
 
-  if (!slides.length) return null;
+  const swipe = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_, g) => Math.abs(g.dx) > 12 && Math.abs(g.dx) > Math.abs(g.dy) * 1.5,
+        onPanResponderTerminationRequest: () => false,
+        onPanResponderRelease: (_, g) => {
+          lastSwipe.current = Date.now(); // the press that ends a swipe must not open the recipe
+          if (Math.abs(g.dx) < 40) return;
+          pausedUntil.current = Date.now() + PAUSE_AFTER_SWIPE_MS;
+          goRef.current(g.dx > 0 ? 1 : -1);
+        },
+      }),
+    [],
+  );
+
+  if (!current) return null;
+  const cat = categoryOf(current);
+  const sub = cat === 'food' ? current.mealTypes.map((m) => MEAL_LABELS[m]).join(' • ') : CATEGORY_LABELS_ONE[cat];
 
   return (
     <View style={{ gap: space.sm }}>
@@ -48,47 +76,38 @@ export function DarwishSlider() {
           <Text style={{ color: c.primary, fontWeight: '800' }}>كل وصفات درويش</Text>
         </Pressable>
       </View>
-      <View style={[styles.frame, { borderColor: c.border }]} onLayout={(e) => setWidth(e.nativeEvent.layout.width)}>
-        {width ? (
-          <FlatList
-            ref={list}
-            data={slides}
-            horizontal
-            pagingEnabled
-            showsHorizontalScrollIndicator={false}
-            keyExtractor={(r) => r.id}
-            getItemLayout={(_, i) => ({ length: width, offset: width * i, index: i })}
-            onScrollBeginDrag={() => (touching.current = true)}
-            onMomentumScrollEnd={onScrollEnd}
-            onScrollEndDrag={onScrollEnd}
-            renderItem={({ item }) => {
-              const cat = categoryOf(item);
-              const sub = cat === 'food' ? item.mealTypes.map((m) => MEAL_LABELS[m]).join(' • ') : CATEGORY_LABELS_ONE[cat];
-              return (
-                <Pressable
-                  style={{ width }}
-                  onPress={() => router.push({ pathname: '/darwish/[id]', params: { id: item.id } })}
-                  accessibilityRole="button"
-                  accessibilityLabel={item.title}>
-                  <RecipeImage uri={item.image} height={200} rounded={false} icon={CATEGORY_ICONS[cat]} iconSize={64} />
-                  <View style={[styles.caption, { backgroundColor: c.overlay }]}>
-                    <Text style={styles.captionTitle} numberOfLines={1}>
-                      {item.title}
-                    </Text>
-                    {sub ? <Text style={styles.captionSub}>{sub}</Text> : null}
-                  </View>
-                </Pressable>
-              );
+      <View style={[styles.frame, { borderColor: c.border }]} {...swipe.panHandlers}>
+        <Animated.View style={{ opacity: fade }}>
+          <Pressable
+            onPress={() => {
+              if (Date.now() - lastSwipe.current > 400) router.push({ pathname: '/darwish/[id]', params: { id: current.id } });
             }}
-          />
-        ) : (
-          <View style={{ height: 200 }} />
-        )}
+            accessibilityRole="button"
+            accessibilityLabel={current.title}>
+            <RecipeImage uri={current.image} height={200} rounded={false} icon={CATEGORY_ICONS[cat]} iconSize={64} />
+            <View style={[styles.caption, { backgroundColor: c.overlay }]}>
+              <Text style={styles.captionTitle} numberOfLines={1}>
+                {current.title}
+              </Text>
+              {sub ? <Text style={styles.captionSub}>{sub}</Text> : null}
+            </View>
+          </Pressable>
+        </Animated.View>
       </View>
-      {slides.length > 1 ? (
+      {count > 1 ? (
         <View style={styles.dots}>
           {slides.map((s, i) => (
-            <View key={s.id} style={[styles.dot, { backgroundColor: i === index ? c.primary : c.border, width: i === index ? 18 : 7 }]} />
+            <Pressable
+              key={s.id}
+              accessibilityRole="button"
+              accessibilityLabel={`الوصفة ${i + 1}: ${s.title}`}
+              hitSlop={6}
+              onPress={() => {
+                pausedUntil.current = Date.now() + PAUSE_AFTER_SWIPE_MS;
+                if (i !== index) go(i - index);
+              }}>
+              <View style={[styles.dot, { backgroundColor: i === index ? c.primary : c.border, width: i === index ? 18 : 7 }]} />
+            </Pressable>
           ))}
         </View>
       ) : null}
