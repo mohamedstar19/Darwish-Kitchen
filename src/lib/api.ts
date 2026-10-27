@@ -3,7 +3,7 @@ import { KEYS, readJson, writeJson } from './kv';
 /** Backup server (see `server/`). Override with EXPO_PUBLIC_API_URL, e.g. for local testing. */
 export const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? 'https://kitchen.darwish-tech.com').replace(/\/$/, '');
 
-export type Auth = { token: string; email: string; userId: string };
+export type Auth = { token: string; phone: string; userId: string };
 
 export class ApiError extends Error {
   constructor(
@@ -17,7 +17,11 @@ export class ApiError extends Error {
 let cached: Auth | null | undefined;
 
 export async function getAuth(): Promise<Auth | null> {
-  if (cached === undefined) cached = await readJson<Auth>(KEYS.auth);
+  if (cached === undefined) {
+    const stored = await readJson<Auth>(KEYS.auth);
+    // Logins from the email version have no phone: sign in again with a phone number.
+    cached = stored?.phone ? stored : null;
+  }
   return cached;
 }
 
@@ -63,4 +67,9 @@ export async function authHeader(): Promise<Record<string, string>> {
   const a = await getAuth();
   if (!a) throw new ApiError(401, 'signed-out');
   return { Authorization: `Bearer ${a.token}` };
+}
+
+/** 201001234567 → 01001234567 for Egyptian numbers; others as +<digits>. */
+export function displayPhone(phone: string): string {
+  return /^20\d{10}$/.test(phone) ? `0${phone.slice(2)}` : `+${phone}`;
 }

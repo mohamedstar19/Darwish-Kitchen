@@ -6,10 +6,12 @@ const AUTO_BACKUP_EVERY = 24 * 60 * 60 * 1000;
 
 type AuthContextValue = {
   auth: Auth | null;
-  email?: string;
+  phone?: string;
   ready: boolean;
-  signIn: (email: string, password: string) => Promise<void>;
-  signUp: (email: string, password: string) => Promise<void>;
+  /** Sends a login code (WhatsApp) to the number. */
+  sendCode: (phone: string) => Promise<{ expiresIn: number }>;
+  /** Checks the code and signs in (creates the account the first time). */
+  verifyCode: (phone: string, code: string) => Promise<Auth>;
   signOut: () => Promise<void>;
   /** Re-reads the saved login (e.g. after the server rejected it). */
   refresh: () => Promise<void>;
@@ -17,7 +19,7 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-type SessionResponse = { token: string; user: { id: string; email: string } };
+type SessionResponse = { token: string; user: { id: string; phone: string } };
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [auth, setState] = useState<Auth | null>(null);
@@ -40,23 +42,29 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       .catch(() => refresh());
   }, [userId, refresh]);
 
-  const start = useCallback(async (path: string, email: string, password: string) => {
-    const res = await api<SessionResponse>(path, { json: { email: email.trim(), password }, auth: false });
-    const next = { token: res.token, email: res.user.email, userId: res.user.id };
+  const sendCode = useCallback(
+    (phone: string) => api<{ expiresIn: number }>('/api/auth/otp/send', { json: { phone }, auth: false }),
+    [],
+  );
+
+  const verifyCode = useCallback(async (phone: string, code: string) => {
+    const res = await api<SessionResponse>('/api/auth/otp/verify', { json: { phone, code }, auth: false });
+    const next = { token: res.token, phone: res.user.phone, userId: res.user.id };
     const previous = await getAuth();
     // A different account on this phone must never auto-backup over its own data.
     if (previous?.userId !== next.userId) await clearBackupMeta();
     await setAuth(next);
     setState(next);
+    return next;
   }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
       auth,
-      email: auth?.email,
+      phone: auth?.phone,
       ready,
-      signIn: (email, password) => start('/api/auth/login', email, password),
-      signUp: (email, password) => start('/api/auth/signup', email, password),
+      sendCode,
+      verifyCode,
       signOut: async () => {
         await api('/api/auth/logout', { method: 'POST' }).catch(() => {});
         await setAuth(null);
@@ -65,7 +73,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
       },
       refresh,
     }),
-    [auth, ready, start, refresh],
+    [auth, ready, sendCode, verifyCode, refresh],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

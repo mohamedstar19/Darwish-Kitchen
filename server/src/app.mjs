@@ -1,15 +1,16 @@
 import { randomUUID } from 'node:crypto';
 import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { createRateLimiter, DUMMY_HASH, hashPassword, hashToken, newToken, verifyPassword } from './auth.mjs';
+import { createRateLimiter, hashToken, newToken } from './auth.mjs';
 import { openDb } from './db.mjs';
+import { createOtp, normalizePhone } from './otp.mjs';
 
 const SESSION_DAYS = 180;
 const MAX_JSON = 10 * 1024 * 1024; // backup JSON
 const MAX_IMAGE = 5 * 1024 * 1024;
 const MAX_IMAGES_PER_USER = 2000;
 const IMAGE_NAME = /^[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}\.jpg$/;
-const EMAIL = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+const MAX_CODE_ATTEMPTS = 5;
 
 class HttpError extends Error {
   constructor(status, code) {
@@ -60,26 +61,37 @@ function clientIp(req) {
   return req.socket.remoteAddress ?? 'unknown';
 }
 
-function credentials(body) {
-  const email = typeof body?.email === 'string' ? body.email.trim().toLowerCase() : '';
-  const password = typeof body?.password === 'string' ? body.password : '';
-  if (!EMAIL.test(email) || email.length > 254) throw new HttpError(400, 'invalid-email');
-  if (password.length < 8 || password.length > 200) throw new HttpError(400, 'weak-password');
-  return { email, password };
+function phoneFrom(body) {
+  const phone = normalizePhone(body?.phone);
+  if (!phone) throw new HttpError(400, 'invalid-phone');
+  return phone;
 }
 
-/** Builds the request handler. `dataDir` holds the SQLite file and users' photos. */
-export function createApp({ dataDir }) {
+/**
+ * Builds the request handler. `dataDir` holds the SQLite file and users' photos.
+ * `otp` configures login codes (see otp.mjs): { url, token } for Darwish OTP, or { devCodes, onDevCode } for tests.
+ */
+export function createApp({ dataDir, otp: otpConfig = {} }) {
   const db = openDb(dataDir);
   const imagesRoot = join(dataDir, 'images');
-  const authLimit = createRateLimiter({ limit: 20, windowMs: 15 * 60 * 1000 });
+  const otp = createOtp(otpConfig);
+  const sendPerIp = createRateLimiter({ limit: 10, windowMs: 15 * 60 * 1000 });
+  const sendPerPhone = createRateLimiter({ limit: 3, windowMs: 10 * 60 * 1000 });
+  const verifyPerIp = createRateLimiter({ limit: 30, windowMs: 15 * 60 * 1000 });
 
   const q = {
-    userByEmail: db.prepare('SELECT id, email, password_hash FROM users WHERE email = ?'),
-    insertUser: db.prepare('INSERT INTO users (id, email, password_hash, created_at) VALUES (?, ?, ?, ?)'),
+    userByPhone: db.prepare('SELECT id, phone FROM users WHERE phone = ?'),
+    insertUser: db.prepare('INSERT INTO users (id, phone, created_at) VALUES (?, ?, ?)'),
+    otpRequest: db.prepare('SELECT request_id, code_hash, attempts, expires_at FROM otp_requests WHERE phone = ?'),
+    saveOtpRequest: db.prepare(
+      'INSERT INTO otp_requests (phone, request_id, code_hash, attempts, expires_at, created_at) VALUES (?, ?, ?, 0, ?, ?) ON CONFLICT(phone) DO UPDATE SET request_id = excluded.request_id, code_hash = excluded.code_hash, attempts = 0, expires_at = excluded.expires_at, created_at = excluded.created_at',
+    ),
+    otpFailed: db.prepare('UPDATE otp_requests SET attempts = attempts + 1 WHERE phone = ?'),
+    deleteOtpRequest: db.prepare('DELETE FROM otp_requests WHERE phone = ?'),
+    deleteExpiredOtp: db.prepare('DELETE FROM otp_requests WHERE expires_at < ?'),
     insertSession: db.prepare('INSERT INTO sessions (token_hash, user_id, created_at, expires_at) VALUES (?, ?, ?, ?)'),
     session: db.prepare(
-      'SELECT s.user_id AS userId, u.email AS email, s.expires_at AS expiresAt FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?',
+      'SELECT s.user_id AS userId, u.phone AS phone, s.expires_at AS expiresAt FROM sessions s JOIN users u ON u.id = s.user_id WHERE s.token_hash = ?',
     ),
     deleteSession: db.prepare('DELETE FROM sessions WHERE token_hash = ?'),
     deleteExpired: db.prepare('DELETE FROM sessions WHERE expires_at < ?'),
@@ -91,20 +103,24 @@ export function createApp({ dataDir }) {
     deleteUser: db.prepare('DELETE FROM users WHERE id = ?'),
   };
 
-  const startSession = (userId, email) => {
+  const startSession = (userId, phone) => {
     const token = newToken();
     const now = Date.now();
     q.insertSession.run(hashToken(token), userId, now, now + SESSION_DAYS * 86_400_000);
-    if (Math.random() < 0.05) q.deleteExpired.run(now);
-    return { token, user: { id: userId, email } };
+    if (Math.random() < 0.05) {
+      q.deleteExpired.run(now);
+      q.deleteExpiredOtp.run(now);
+    }
+    return { token, user: { id: userId, phone } };
   };
 
   const requireUser = (req) => {
     const match = /^Bearer\s+(\S+)$/.exec(String(req.headers.authorization ?? ''));
     if (!match) throw new HttpError(401, 'signed-out');
     const row = q.session.get(hashToken(match[1]));
-    if (!row || row.expiresAt < Date.now()) throw new HttpError(401, 'signed-out');
-    return { userId: row.userId, email: row.email, tokenHash: hashToken(match[1]) };
+    // Old email-only accounts (no phone) must sign in again with a phone number.
+    if (!row || row.expiresAt < Date.now() || !row.phone) throw new HttpError(401, 'signed-out');
+    return { userId: row.userId, phone: row.phone, tokenHash: hashToken(match[1]) };
   };
 
   const userDir = (userId) => join(imagesRoot, userId);
@@ -123,21 +139,54 @@ export function createApp({ dataDir }) {
   async function route(req, res, path) {
     const m = req.method;
 
-    if (path === '/api/health' && m === 'GET') return send(res, 200, { ok: true });
+    if (path === '/api/health' && m === 'GET') return send(res, 200, { ok: true, otp: otp.enabled });
 
-    if ((path === '/api/auth/signup' || path === '/api/auth/login') && m === 'POST') {
-      if (!authLimit(clientIp(req))) throw new HttpError(429, 'too-many-attempts');
-      const { email, password } = credentials(await readJson(req));
-      if (path === '/api/auth/signup') {
-        if (q.userByEmail.get(email)) throw new HttpError(409, 'email-taken');
-        const id = randomUUID();
-        q.insertUser.run(id, email, await hashPassword(password), Date.now());
-        return send(res, 201, startSession(id, email));
+    if (path === '/api/auth/otp/send' && m === 'POST') {
+      const phone = phoneFrom(await readJson(req));
+      if (!otp.enabled) throw new HttpError(503, 'otp-unavailable');
+      if (!sendPerIp(clientIp(req)) || !sendPerPhone(phone)) throw new HttpError(429, 'too-many-attempts');
+      let sent;
+      try {
+        sent = await otp.send(phone);
+      } catch (e) {
+        console.error(new Date().toISOString(), 'OTP send failed', e.message);
+        throw new HttpError(502, 'otp-send-failed');
       }
-      const user = q.userByEmail.get(email);
-      const ok = await verifyPassword(password, user?.password_hash ?? DUMMY_HASH);
-      if (!user || !ok) throw new HttpError(401, 'invalid-login');
-      return send(res, 200, startSession(user.id, user.email));
+      const now = Date.now();
+      q.saveOtpRequest.run(phone, sent.requestId ?? null, sent.codeHash ?? null, now + sent.expiresIn * 1000, now);
+      return send(res, 200, { expiresIn: sent.expiresIn });
+    }
+
+    if (path === '/api/auth/otp/verify' && m === 'POST') {
+      if (!verifyPerIp(clientIp(req))) throw new HttpError(429, 'too-many-attempts');
+      const body = await readJson(req);
+      const phone = phoneFrom(body);
+      const code = typeof body?.code === 'string' ? body.code.trim().replace(/[٠-٩]/g, (d) => String('٠١٢٣٤٥٦٧٨٩'.indexOf(d))) : '';
+      if (!/^\d{4,8}$/.test(code)) throw new HttpError(400, 'wrong-code');
+      const record = q.otpRequest.get(phone);
+      if (!record || record.expires_at < Date.now()) throw new HttpError(400, 'code-expired');
+      if (record.attempts >= MAX_CODE_ATTEMPTS) {
+        q.deleteOtpRequest.run(phone);
+        throw new HttpError(429, 'too-many-attempts');
+      }
+      let valid;
+      try {
+        valid = await otp.check(phone, record, code);
+      } catch (e) {
+        console.error(new Date().toISOString(), 'OTP verify failed', e.message);
+        throw new HttpError(502, 'otp-send-failed');
+      }
+      if (!valid) {
+        q.otpFailed.run(phone);
+        throw new HttpError(400, 'wrong-code');
+      }
+      q.deleteOtpRequest.run(phone);
+      let user = q.userByPhone.get(phone);
+      if (!user) {
+        user = { id: randomUUID(), phone };
+        q.insertUser.run(user.id, phone, Date.now());
+      }
+      return send(res, 200, startSession(user.id, phone));
     }
 
     if (path === '/api/auth/logout' && m === 'POST') {
@@ -147,8 +196,8 @@ export function createApp({ dataDir }) {
     }
 
     if (path === '/api/me' && m === 'GET') {
-      const { userId, email } = requireUser(req);
-      return send(res, 200, { user: { id: userId, email } });
+      const { userId, phone } = requireUser(req);
+      return send(res, 200, { user: { id: userId, phone } });
     }
 
     if (path === '/api/backup') {

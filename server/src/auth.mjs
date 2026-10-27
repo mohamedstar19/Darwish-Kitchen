@@ -1,25 +1,4 @@
-import { createHash, randomBytes, scrypt as scryptCb, timingSafeEqual } from 'node:crypto';
-import { promisify } from 'node:util';
-
-const scrypt = promisify(scryptCb);
-const KEY_LEN = 64;
-
-export async function hashPassword(password) {
-  const salt = randomBytes(16);
-  const key = await scrypt(password, salt, KEY_LEN);
-  return `scrypt$${salt.toString('hex')}$${key.toString('hex')}`;
-}
-
-export async function verifyPassword(password, stored) {
-  const [kind, saltHex, keyHex] = String(stored).split('$');
-  if (kind !== 'scrypt' || !saltHex || !keyHex) return false;
-  const expected = Buffer.from(keyHex, 'hex');
-  const actual = await scrypt(password, Buffer.from(saltHex, 'hex'), expected.length);
-  return timingSafeEqual(actual, expected);
-}
-
-/** A hash to compare against when the email doesn't exist, so timing doesn't reveal accounts. */
-export const DUMMY_HASH = `scrypt$${'0'.repeat(32)}$${'0'.repeat(KEY_LEN * 2)}`;
+import { createHash, randomBytes } from 'node:crypto';
 
 export const newToken = () => randomBytes(32).toString('base64url');
 export const hashToken = (token) => createHash('sha256').update(token).digest('hex');

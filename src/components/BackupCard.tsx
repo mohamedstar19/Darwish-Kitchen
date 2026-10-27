@@ -1,6 +1,7 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useState } from 'react';
 import { StyleSheet, Text, View } from 'react-native';
+import { displayPhone } from '../lib/api';
 import { useAuth } from '../lib/auth-context';
 import { backupNow, deleteAccount, getBackupMeta, getServerBackupDate, restoreBackup, type BackupMeta } from '../lib/backup';
 import { confirm, notify } from '../lib/confirm';
@@ -14,7 +15,7 @@ type Busy = null | 'backup' | 'restore' | 'delete';
 /** Account + backup controls on the profile tab. */
 export function BackupCard() {
   const c = useTheme();
-  const { auth, email, signOut, refresh } = useAuth();
+  const { auth, phone, signOut, refresh } = useAuth();
   const reload = useReloadData();
   const [meta, setMeta] = useState<BackupMeta>({});
   const [busy, setBusy] = useState<Busy>(null);
@@ -29,8 +30,8 @@ export function BackupCard() {
     return (
       <Card>
         <Title text="الحساب والنسخ الاحتياطي" />
-        <Muted>بياناتك محفوظة على الموبايل. اعمل حساب علشان تاخد نسخة احتياطية من وصفاتك وملفك وترجّعها لو غيّرت الموبايل.</Muted>
-        <Button label="تسجيل الدخول أو حساب جديد" icon="person-add-outline" onPress={() => router.push('/account')} />
+        <Muted>بياناتك محفوظة على الموبايل. سجّل برقم موبايلك علشان تاخد نسخة احتياطية من وصفاتك وملفك وترجّعها لو غيّرت الموبايل.</Muted>
+        <Button label="سجّل برقم الموبايل" icon="phone-portrait-outline" onPress={() => router.push('/account')} />
       </Card>
     );
   }
@@ -107,7 +108,7 @@ export function BackupCard() {
     <Card>
       <Title text="الحساب والنسخ الاحتياطي" />
       <View style={{ gap: 2 }}>
-        <Text style={{ color: c.text, fontWeight: '700', writingDirection: 'ltr', textAlign: 'auto' }}>{email}</Text>
+        <Text style={{ color: c.text, fontWeight: '700', writingDirection: 'ltr', textAlign: 'auto' }}>{phone ? displayPhone(phone) : ''}</Text>
         <Muted>{meta.lastBackupAt ? `آخر نسخة احتياطية: ${formatDateTime(meta.lastBackupAt)}` : 'لسه مخدتش نسخة احتياطية.'}</Muted>
         <Muted style={{ fontSize: 12 }}>بعد أول نسخة، التطبيق بياخد نسخة لوحده مرة كل يوم وانت مسجّل.</Muted>
       </View>
