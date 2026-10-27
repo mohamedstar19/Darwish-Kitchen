@@ -32,6 +32,14 @@
 | `server/` | Backup API (Node 22, no dependencies, SQLite) + tests |
 | `deploy/` | One-command deploy to the darwish-tech server, nginx site |
 
+## Sections (أكل / مشروبات صحية / عصائر)
+
+- `Recipe.category` is `food` | `healthy-drink` | `juice`; missing means `food` (older data). Use `categoryOf()`.
+- Drinks and juices don't need meal types; the add/edit form hides the meal picker for them.
+- "وصفاتي" has section tabs (الكل / أكل / مشروبات صحية / عصائر); meal filters show only in أكل. `/recipes?section=juice` opens a section (used by the home tiles).
+- Starter drinks/juices live in `DRINK_SAMPLES`. `SAMPLES_VERSION` (stored under `darwish-kitchen.samples-version`) adds new starters once for existing users; a starter the user deleted later doesn't come back.
+- "حناكل إيه النهارده؟" only suggests food.
+
 ## Suggestions
 
 - The meal defaults from the clock: 04:00–10:59 breakfast, 11:00–16:59 lunch, otherwise dinner.

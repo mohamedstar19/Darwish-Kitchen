@@ -81,7 +81,19 @@ export function Card({ children, style }: { children: ReactNode; style?: StylePr
   return <View style={[styles.card, { backgroundColor: c.card, borderColor: c.border }, style]}>{children}</View>;
 }
 
-export function RecipeImage({ uri, height = 200, rounded = true, iconSize = 48 }: { uri?: string; height?: number; rounded?: boolean; iconSize?: number }) {
+export function RecipeImage({
+  uri,
+  height = 200,
+  rounded = true,
+  iconSize = 48,
+  icon = 'restaurant',
+}: {
+  uri?: string;
+  height?: number;
+  rounded?: boolean;
+  iconSize?: number;
+  icon?: IconName;
+}) {
   const c = useTheme();
   const shape = { height, borderRadius: rounded ? radius.md : 0 };
   if (uri) {
@@ -89,7 +101,7 @@ export function RecipeImage({ uri, height = 200, rounded = true, iconSize = 48 }
   }
   return (
     <View style={[styles.image, styles.placeholder, shape, { backgroundColor: c.cardAlt }]}>
-      <Ionicons name="restaurant" size={iconSize} color={c.primary} style={{ opacity: 0.6 }} />
+      <Ionicons name={icon} size={iconSize} color={c.primary} style={{ opacity: 0.6 }} />
     </View>
   );
 }

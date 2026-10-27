@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { refKey, type MealType, type RecipeRef } from '../types';
+import { categoryOf, refKey, type MealType, type RecipeCategory, type RecipeRef } from '../types';
 import { useActivity } from './activity-context';
 import { useRecipes } from './recipes-context';
 
@@ -18,6 +18,7 @@ export type ProfileItem = {
   title: string;
   image?: string;
   mealTypes?: MealType[];
+  category?: RecipeCategory;
   minutes?: number;
   stars?: number;
 };
@@ -33,7 +34,7 @@ export function useProfileSections(): Record<ProfileSection, ProfileItem[]> {
       if (ref.kind === 'local') {
         const r = byId.get(ref.id);
         if (!r) return null;
-        return { key: refKey(ref), ref, title: r.title, image: r.image, mealTypes: r.mealTypes, minutes: r.prepMinutes };
+        return { key: refKey(ref), ref, title: r.title, image: r.image, mealTypes: r.mealTypes, category: categoryOf(r), minutes: r.prepMinutes };
       }
       return { key: refKey(ref), ref, title: ref.title ?? 'وصفة من النت', image: ref.image };
     };

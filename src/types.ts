@@ -8,9 +8,35 @@ export const MEAL_LABELS: Record<MealType, string> = {
   dinner: 'عشاء',
 };
 
+export type RecipeCategory = 'food' | 'healthy-drink' | 'juice';
+
+export const CATEGORIES: RecipeCategory[] = ['food', 'healthy-drink', 'juice'];
+
+export const CATEGORY_LABELS: Record<RecipeCategory, string> = {
+  food: 'أكل',
+  'healthy-drink': 'مشروبات صحية',
+  juice: 'عصائر',
+};
+
+/** Singular labels for forms and badges. */
+export const CATEGORY_LABELS_ONE: Record<RecipeCategory, string> = {
+  food: 'أكلة',
+  'healthy-drink': 'مشروب صحي',
+  juice: 'عصير',
+};
+
+export const CATEGORY_ICONS = {
+  food: 'restaurant',
+  'healthy-drink': 'leaf',
+  juice: 'nutrition',
+} as const satisfies Record<RecipeCategory, string>;
+
 export type Recipe = {
   id: string;
   title: string;
+  /** Missing on recipes saved before sections existed: treat as 'food'. */
+  category?: RecipeCategory;
+  /** Used for food; drinks and juices usually leave it empty. */
   mealTypes: MealType[];
   /** Local file URI (mobile), data URI (web) or remote URL (saved internet recipes). */
   image?: string;
@@ -30,6 +56,8 @@ export type Recipe = {
 };
 
 export type RecipeInput = Omit<Recipe, 'id' | 'createdAt' | 'updatedAt'>;
+
+export const categoryOf = (r: Pick<Recipe, 'category'>): RecipeCategory => r.category ?? 'food';
 
 /** A recipe fetched from the internet (TheMealDB), not yet saved. */
 export type WebRecipe = {

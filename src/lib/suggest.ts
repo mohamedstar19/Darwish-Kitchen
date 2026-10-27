@@ -1,4 +1,4 @@
-import type { MealType, Recipe, WebRecipe } from '../types';
+import { categoryOf, type MealType, type Recipe, type WebRecipe } from '../types';
 import { suggestWebRecipe } from './mealdb';
 
 export type SuggestSource = 'all' | 'mine' | 'web';
@@ -8,7 +8,7 @@ export type Suggestion = { kind: 'local'; recipe: Recipe } | { kind: 'web'; reci
 const random = <T,>(items: T[]) => items[Math.floor(Math.random() * items.length)];
 
 function pickLocal(recipes: Recipe[], meal: MealType, recent: string[]): Recipe | null {
-  const fits = recipes.filter((r) => r.mealTypes.includes(meal));
+  const fits = recipes.filter((r) => categoryOf(r) === 'food' && r.mealTypes.includes(meal));
   if (!fits.length) return null;
   const fresh = fits.filter((r) => !recent.includes(r.id));
   return random(fresh.length ? fresh : fits);

@@ -11,6 +11,7 @@ export function webToRecipeInput(web: WebRecipe, meal?: MealType): RecipeInput {
   const mealTypes: MealType[] = web.category === 'Breakfast' ? ['breakfast'] : meal ? [meal] : ['lunch', 'dinner'];
   return {
     title: web.title,
+    category: 'food',
     mealTypes,
     image: web.image,
     ingredients: web.ingredients,

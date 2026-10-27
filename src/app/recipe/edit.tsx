@@ -7,7 +7,7 @@ import { notify } from '../../lib/confirm';
 import { pickRecipeImage, type ImageSource } from '../../lib/images';
 import { useRecipes } from '../../lib/recipes-context';
 import { radius, space, useTheme } from '../../theme';
-import { MEAL_LABELS, MEAL_TYPES, type MealType } from '../../types';
+import { CATEGORIES, CATEGORY_ICONS, CATEGORY_LABELS_ONE, categoryOf, MEAL_LABELS, MEAL_TYPES, type MealType, type RecipeCategory } from '../../types';
 
 const lines = (text: string) =>
   text
@@ -21,21 +21,24 @@ const toNumber = (text: string) => {
 };
 
 export default function EditRecipeScreen() {
-  const { id } = useLocalSearchParams<{ id?: string }>();
+  const { id, category } = useLocalSearchParams<{ id?: string; category?: string }>();
   const { ready } = useRecipes();
   // Wait for saved recipes to load so an edit form never starts empty.
   if (!ready) return <ActivityIndicator style={{ marginTop: 60 }} />;
-  return <RecipeForm key={id ?? 'new'} id={id} />;
+  const initial = CATEGORIES.includes(category as RecipeCategory) ? (category as RecipeCategory) : 'food';
+  return <RecipeForm key={id ?? `new-${initial}`} id={id} initialCategory={initial} />;
 }
 
-function RecipeForm({ id }: { id?: string }) {
+function RecipeForm({ id, initialCategory }: { id?: string; initialCategory: RecipeCategory }) {
   const c = useTheme();
   const { getRecipe, addRecipe, updateRecipe } = useRecipes();
   const existing = id ? getRecipe(id) : undefined;
 
   const [image, setImage] = useState<string | undefined>(existing?.image);
   const [title, setTitle] = useState(existing?.title ?? '');
+  const [category, setCategory] = useState<RecipeCategory>(existing ? categoryOf(existing) : initialCategory);
   const [mealTypes, setMealTypes] = useState<MealType[]>(existing?.mealTypes ?? []);
+  const isFood = category === 'food';
   const [minutes, setMinutes] = useState(existing?.prepMinutes ? String(existing.prepMinutes) : '');
   const [servings, setServings] = useState(existing?.servings ? String(existing.servings) : '');
   const [ingredients, setIngredients] = useState(existing?.ingredients.join('\n') ?? '');
@@ -67,13 +70,14 @@ function RecipeForm({ id }: { id?: string }) {
   const save = async () => {
     const problems: string[] = [];
     if (!title.trim()) problems.push('اكتب اسم الوصفة.');
-    if (!mealTypes.length) problems.push('اختار الوجبة (فطار، غداء أو عشاء).');
+    if (isFood && !mealTypes.length) problems.push('اختار الوجبة (فطار، غداء أو عشاء).');
     setErrors(problems);
     if (problems.length) return;
 
     const input = {
       title: title.trim(),
-      mealTypes: MEAL_TYPES.filter((m) => mealTypes.includes(m)),
+      category,
+      mealTypes: isFood ? MEAL_TYPES.filter((m) => mealTypes.includes(m)) : [],
       image,
       ingredients: lines(ingredients),
       steps: lines(steps),
@@ -116,15 +120,15 @@ function RecipeForm({ id }: { id?: string }) {
 
   return (
     <KeyboardAvoidingView style={{ flex: 1 }} behavior={Platform.OS === 'ios' ? 'padding' : undefined}>
-      <Stack.Screen options={{ title: existing ? 'تعديل الوصفة' : 'وصفة جديدة' }} />
+      <Stack.Screen options={{ title: existing ? 'تعديل الوصفة' : isFood ? 'وصفة جديدة' : `${CATEGORY_LABELS_ONE[category]} جديد` }} />
       <ScrollView
         style={{ backgroundColor: c.background }}
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled">
         <View style={{ gap: space.sm }}>
-          <Text style={[styles.label, { color: c.text }]}>صورة الوصفة</Text>
+          <Text style={[styles.label, { color: c.text }]}>الصورة</Text>
           <Pressable onPress={() => choose('library')} disabled={busyImage} accessibilityLabel="اختار صورة">
-            <RecipeImage uri={image} height={210} />
+            <RecipeImage uri={image} height={210} icon={CATEGORY_ICONS[category]} />
             {!image ? (
               <View style={styles.imageHint} pointerEvents="none">
                 <Ionicons name="camera" size={22} color={c.primary} />
@@ -150,23 +154,38 @@ function RecipeForm({ id }: { id?: string }) {
           </View>
         </View>
 
-        {field('اسم الوصفة *', { value: title, onChangeText: setTitle, placeholder: 'مثلاً: محشي كرنب' })}
-
         <View style={{ gap: 6 }}>
-          <Text style={[styles.label, { color: c.text }]}>تنفع لـ *</Text>
+          <Text style={[styles.label, { color: c.text }]}>القسم *</Text>
           <View style={styles.chips}>
-            {MEAL_TYPES.map((m) => (
-              <Chip key={m} label={MEAL_LABELS[m]} selected={mealTypes.includes(m)} onPress={() => toggleMeal(m)} />
+            {CATEGORIES.map((cat) => (
+              <Chip key={cat} label={CATEGORY_LABELS_ONE[cat]} icon={CATEGORY_ICONS[cat]} selected={category === cat} onPress={() => setCategory(cat)} />
             ))}
           </View>
         </View>
+
+        {field('الاسم *', {
+          value: title,
+          onChangeText: setTitle,
+          placeholder: category === 'juice' ? 'مثلاً: عصير جوافة' : category === 'healthy-drink' ? 'مثلاً: ينسون بالعسل' : 'مثلاً: محشي كرنب',
+        })}
+
+        {isFood ? (
+          <View style={{ gap: 6 }}>
+            <Text style={[styles.label, { color: c.text }]}>تنفع لـ *</Text>
+            <View style={styles.chips}>
+              {MEAL_TYPES.map((m) => (
+                <Chip key={m} label={MEAL_LABELS[m]} selected={mealTypes.includes(m)} onPress={() => toggleMeal(m)} />
+              ))}
+            </View>
+          </View>
+        ) : null}
 
         <View style={styles.row}>
           <View style={{ flex: 1 }}>
             {field('الوقت (دقيقة)', { value: minutes, onChangeText: setMinutes, keyboardType: 'number-pad', placeholder: '30' })}
           </View>
           <View style={{ flex: 1 }}>
-            {field('عدد الأفراد', { value: servings, onChangeText: setServings, keyboardType: 'number-pad', placeholder: '4' })}
+            {field(isFood ? 'عدد الأفراد' : 'عدد الكوبايات', { value: servings, onChangeText: setServings, keyboardType: 'number-pad', placeholder: '4' })}
           </View>
         </View>
 

@@ -8,7 +8,7 @@ import { useActivity } from '../../lib/activity-context';
 import { confirm } from '../../lib/confirm';
 import { useRecipes } from '../../lib/recipes-context';
 import { space, useTheme } from '../../theme';
-import { MEAL_LABELS } from '../../types';
+import { CATEGORY_ICONS, CATEGORY_LABELS_ONE, categoryOf, MEAL_LABELS } from '../../types';
 
 export default function RecipeScreen() {
   const c = useTheme();
@@ -36,14 +36,16 @@ export default function RecipeScreen() {
 
   const ref = { kind: 'local' as const, id: recipe.id };
   const liked = isLiked(ref);
+  const category = categoryOf(recipe);
 
   return (
     <ScrollView style={{ backgroundColor: c.background }} contentContainerStyle={styles.container}>
       <Stack.Screen options={{ title: recipe.title }} />
-      <RecipeImage uri={recipe.image} height={260} />
+      <RecipeImage uri={recipe.image} height={260} icon={CATEGORY_ICONS[category]} />
       <View style={{ gap: space.sm }}>
         <Text style={[styles.title, { color: c.text }]}>{recipe.title}</Text>
         <View style={styles.row}>
+          {category !== 'food' ? <Badge label={CATEGORY_LABELS_ONE[category]} tone="accent" /> : null}
           {recipe.mealTypes.map((m) => (
             <Badge key={m} label={MEAL_LABELS[m]} />
           ))}
@@ -51,7 +53,7 @@ export default function RecipeScreen() {
         </View>
         <View style={styles.row}>
           {recipe.prepMinutes ? <Meta icon="hourglass-outline" label={`${recipe.prepMinutes} دقيقة`} /> : null}
-          {recipe.servings ? <Meta icon="people-outline" label={`${recipe.servings} أفراد`} /> : null}
+          {recipe.servings ? <Meta icon="people-outline" label={`${recipe.servings} ${category === 'food' ? 'أفراد' : 'كوباية'}`} /> : null}
         </View>
       </View>
 

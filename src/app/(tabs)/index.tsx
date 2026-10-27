@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useRef, useState } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Badge, Button, Card, Chip, Meta, Muted, RecipeImage } from '../../components/ui';
 import { CATEGORY_AR } from '../../lib/mealdb';
@@ -10,9 +10,14 @@ import { suggestMeal, type SuggestSource, type Suggestion } from '../../lib/sugg
 import { rememberWebRecipe, webToRecipeInput } from '../../lib/web-recipes';
 import { notify } from '../../lib/confirm';
 import { radius, space, useTheme } from '../../theme';
-import { MEAL_LABELS, MEAL_TYPES, mealTypeForNow, type MealType } from '../../types';
+import { CATEGORY_ICONS, CATEGORY_LABELS, categoryOf, MEAL_LABELS, MEAL_TYPES, mealTypeForNow, type MealType, type RecipeCategory } from '../../types';
 
 const MEAL_ICONS = { breakfast: 'cafe', lunch: 'restaurant', dinner: 'moon' } as const;
+
+const DRINK_SECTIONS: { key: RecipeCategory; hint: string }[] = [
+  { key: 'healthy-drink', hint: 'ينسون، كركديه، جنزبيل…' },
+  { key: 'juice', hint: 'برتقال، مانجو، ليمون بالنعناع…' },
+];
 
 const SOURCES: { key: SuggestSource; label: string }[] = [
   { key: 'all', label: 'الاتنين' },
@@ -158,6 +163,26 @@ export default function HomeScreen() {
           <Muted style={{ textAlign: 'center' }}>اختار الوجبة ودوس على الزرار، وإحنا نقترح عليك أكلة من وصفاتك أو من النت.</Muted>
         </View>
       ) : null}
+
+      <View style={{ gap: space.sm }}>
+        <Text style={[styles.label, { color: c.text, fontSize: 18 }]}>عايز تشرب حاجة؟</Text>
+        <View style={styles.actions}>
+          {DRINK_SECTIONS.map(({ key, hint }) => (
+            <Pressable
+              key={key}
+              accessibilityRole="button"
+              accessibilityLabel={CATEGORY_LABELS[key]}
+              onPress={() => router.navigate({ pathname: '/recipes', params: { section: key } })}
+              style={({ pressed }) => [styles.tile, { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.85 : 1 }]}>
+              <View style={[styles.tileIcon, { backgroundColor: key === 'juice' ? c.primarySoft : c.accentSoft }]}>
+                <Ionicons name={CATEGORY_ICONS[key]} size={24} color={key === 'juice' ? c.primary : c.accent} />
+              </View>
+              <Text style={[styles.tileTitle, { color: c.text }]}>{CATEGORY_LABELS[key]}</Text>
+              <Muted style={{ fontSize: 12 }}>{`${recipes.filter((r) => categoryOf(r) === key).length} وصفة • ${hint}`}</Muted>
+            </Pressable>
+          ))}
+        </View>
+      </View>
     </ScrollView>
   );
 }
@@ -172,5 +197,8 @@ const styles = StyleSheet.create({
   resultBody: { padding: space.lg, gap: space.md },
   resultTitle: { fontSize: 22, fontWeight: '900' },
   actions: { flexDirection: 'row', gap: space.sm },
+  tile: { flex: 1, borderWidth: 1, borderRadius: radius.lg, padding: space.md, gap: 6 },
+  tileIcon: { width: 44, height: 44, borderRadius: 22, alignItems: 'center', justifyContent: 'center' },
+  tileTitle: { fontSize: 16, fontWeight: '800' },
   hint: { borderWidth: 1, borderStyle: 'dashed', borderRadius: radius.lg, padding: space.xl, alignItems: 'center', gap: space.sm },
 });
