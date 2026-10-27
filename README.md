@@ -12,7 +12,7 @@
 - **نسخ احتياطي واسترجاع**: حساب بالإيميل وكلمة السر، بيرفع نسخة من وصفاتك وصورها وملفك وتقييماتك على السيرفر، وترجّعها على أي موبايل تاني. فيه كمان حذف الحساب.
 - 6 وصفات مصرية جاهزة للبداية، وضع ليلي، واتجاه عربي من اليمين للشمال.
 
-كل البيانات بتتحفظ على الموبايل نفسه. السيرفر (Supabase) بيستخدم **بس** للنسخ الاحتياطي والاسترجاع، والتطبيق بيشتغل كامل من غيره.
+كل البيانات بتتحفظ على الموبايل نفسه. سيرفر درويش (kitchen.darwish-tech.com) بيستخدم **بس** للنسخ الاحتياطي والاسترجاع، والتطبيق بيشتغل كامل من غيره.
 
 ## تشغيل التطبيق
 
@@ -22,23 +22,12 @@ npm start          # امسح الـ QR بتطبيق Expo Go على الموبا
 npm run web        # نسخة الويب على الكمبيوتر
 ```
 
-## تفعيل النسخ الاحتياطي (Supabase — مجاني)
+## السيرفر والدومين
 
-1. اعمل مشروع جديد على [supabase.com](https://supabase.com).
-2. من **SQL Editor** شغّل الملف [`supabase/schema.sql`](supabase/schema.sql) (بيعمل جدول النسخ ومكان الصور وصلاحيات إن كل مستخدم يشوف نسخته بس).
-3. (اختياري ومريح) من **Authentication → Sign In / Providers → Email** اقفل **Confirm email** علشان الحساب يشتغل على طول من غير رسالة تأكيد.
-4. من **Project Settings → API** خد الـ URL والـ anon key:
-   - للموبايل: انسخ `.env.example` لـ `.env` وحط القيم.
-   - لنسخة الويب: في GitHub → Settings → Secrets and variables → Actions → **Variables** ضيف `EXPO_PUBLIC_SUPABASE_URL` و `EXPO_PUBLIC_SUPABASE_ANON_KEY`.
+- نسخة الويب ونسخة الآيفون: **https://kitchen.darwish-tech.com**
+- سيرفر النسخ الاحتياطي على نفس السيرفر والدومين (`/api`)، والكود بتاعه في [`server/`](server/).
 
-من غير الخطوات دي التطبيق شغال عادي، وقسم النسخ الاحتياطي بيقول إنه مش متفعّل.
-
-## نسخة الآيفون (ويب)
-
-كل push على `main` بيبني نسخة الويب وينشرها على GitHub Pages:
-`https://mohamedstar19.github.io/Darwish-Kitchen/`
-
-أول مرة بس: من إعدادات الريبو → **Pages** → **Source** اختار **GitHub Actions**.
+النشر بأمر واحد من جهازك: `bash deploy/update.sh <IP السيرفر>` — التفاصيل وإعداد Cloudflare في [`deploy/README.md`](deploy/README.md).
 
 على الآيفون: افتح الرابط في Safari ← زرار المشاركة ← **Add to Home Screen**، وهيظهر كأيقونة تطبيق.
 
@@ -56,5 +45,7 @@ npx eas-cli@latest build -p ios --profile production       # محتاج حساب
 | --- | --- |
 | `npm run typecheck` | فحص TypeScript |
 | `npm run build:web` | بناء نسخة الويب في `dist/` |
+| `cd server && npm test` | اختبارات سيرفر النسخ الاحتياطي |
+| `bash deploy/update.sh <IP>` | نشر الويب والسيرفر |
 
 تفاصيل أكتر للمطورين في [`doc/README.md`](doc/README.md).

@@ -1,13 +1,12 @@
 import type { Activity, Profile, Recipe } from '../types';
+import { api, API_URL, authHeader, setAuth } from './api';
 import { deleteStoredImage, isLocalImage, readImageBytes, storeDownloadedImage, type ImageFolder } from './images';
 import { KEYS, readJson, writeJson } from './kv';
 import { loadRecipes } from './storage';
-import { BACKUP_BUCKET, supabase } from './supabase';
 
 /**
- * The server only keeps a copy of the device data:
- * - table `backups`: one JSON row per user (recipes, profile, likes/ratings/views)
- * - storage bucket `backups`: the user's photos under `<user id>/images/`
+ * The server (see `server/`) only keeps a copy of the device data:
+ * one JSON backup per user (recipes, profile, likes/ratings/views) plus the user's photos.
  * Images inside the JSON are written as `backup:<file name>`.
  */
 type BackupData = {
@@ -22,21 +21,12 @@ export type BackupMeta = { lastBackupAt?: number; lastRestoreAt?: number };
 
 const REF = 'backup:';
 
-function client() {
-  if (!supabase) throw new Error('backup-disabled');
-  return supabase;
-}
-
-async function userId(): Promise<string> {
-  const { data } = await client().auth.getSession();
-  const id = data.session?.user.id;
-  if (!id) throw new Error('signed-out');
-  return id;
-}
-
 /** Stable file name for a stored image so unchanged photos aren't uploaded twice. */
 function imageName(uri: string): string {
-  if (!uri.startsWith('data:')) return uri.split('/').pop()!.replace(/[^\w.-]/g, '');
+  if (!uri.startsWith('data:')) {
+    const base = uri.split('/').pop()!.replace(/[^\w.-]/g, '').replace(/^\.+/, '');
+    return base.endsWith('.jpg') ? base : `${base}.jpg`;
+  }
   let h = 0x811c9dc5;
   for (let i = 0; i < uri.length; i++) {
     h ^= uri.charCodeAt(i);
@@ -45,14 +35,14 @@ function imageName(uri: string): string {
   return `w-${(h >>> 0).toString(16)}-${uri.length.toString(16)}.jpg`;
 }
 
-async function listImages(uid: string): Promise<string[]> {
-  const { data, error } = await client().storage.from(BACKUP_BUCKET).list(`${uid}/images`, { limit: 1000 });
-  if (error) throw error;
-  return (data ?? []).map((f) => f.name);
-}
+const listImages = async () => (await api<{ names: string[] }>('/api/images')).names;
 
 export async function getBackupMeta(): Promise<BackupMeta> {
   return (await readJson<BackupMeta>(KEYS.backupMeta)) ?? {};
+}
+
+export async function clearBackupMeta() {
+  await writeJson(KEYS.backupMeta, {});
 }
 
 async function setBackupMeta(changes: BackupMeta) {
@@ -61,86 +51,58 @@ async function setBackupMeta(changes: BackupMeta) {
 
 /** Uploads the device data and photos. Returns how many recipes were backed up. */
 export async function backupNow(): Promise<{ recipes: number; at: number }> {
-  const sb = client();
-  const uid = await userId();
   const recipes = await loadRecipes(); // Includes the starter recipes if they were never edited.
   const profile = await readJson<Profile>(KEYS.profile);
   const activity = await readJson<Activity>(KEYS.activity);
 
   const localUris = [...recipes.map((r) => r.image), profile?.avatar].filter(isLocalImage);
-  const existing = new Set(await listImages(uid));
+  const existing = new Set(await listImages());
   const names = new Map<string, string>();
   for (const uri of new Set(localUris)) {
     const name = imageName(uri);
     names.set(uri, name);
     if (existing.has(name)) continue;
     try {
-      const body = await readImageBytes(uri);
-      const { error } = await sb.storage
-        .from(BACKUP_BUCKET)
-        .upload(`${uid}/images/${name}`, body, { contentType: 'image/jpeg', upsert: true });
-      if (error) throw error;
-    } catch {
+      await api(`/api/images/${encodeURIComponent(name)}`, { method: 'PUT', body: await readImageBytes(uri), type: 'image/jpeg' });
+    } catch (e) {
+      if ((e as { code?: string }).code === 'network') throw e;
       names.delete(uri); // Missing/unreadable photo: back up the recipe without it.
     }
   }
 
   const toRef = (uri?: string) => (uri && names.has(uri) ? REF + names.get(uri) : isLocalImage(uri) ? undefined : uri);
-  const at = Date.now();
   const data: BackupData = {
     version: 1,
-    createdAt: at,
+    createdAt: Date.now(),
     recipes: recipes.map((r) => ({ ...r, image: toRef(r.image) })),
     profile: profile ? { ...profile, avatar: toRef(profile.avatar) } : null,
     activity,
   };
-
-  const { error } = await sb.from('backups').upsert({ user_id: uid, data, updated_at: new Date(at).toISOString() });
-  if (error) throw error;
+  const { updatedAt } = await api<{ updatedAt: number }>('/api/backup', { method: 'PUT', json: { data } });
 
   // Remove photos the backup no longer uses.
   const used = new Set(names.values());
-  const stale = [...existing].filter((n) => !used.has(n)).map((n) => `${uid}/images/${n}`);
-  if (stale.length) await sb.storage.from(BACKUP_BUCKET).remove(stale);
+  const stale = [...existing].filter((n) => !used.has(n));
+  if (stale.length) await api('/api/images', { method: 'DELETE', json: { names: stale } });
 
-  await setBackupMeta({ lastBackupAt: at });
-  return { recipes: recipes.length, at };
+  await setBackupMeta({ lastBackupAt: updatedAt });
+  return { recipes: recipes.length, at: updatedAt };
 }
 
 /** Date of the backup stored on the server, or null if there is none. */
 export async function getServerBackupDate(): Promise<number | null> {
-  const uid = await userId();
-  const { data, error } = await client().from('backups').select('updated_at').eq('user_id', uid).maybeSingle();
-  if (error) throw error;
-  return data ? Date.parse(data.updated_at as string) : null;
+  return (await api<{ updatedAt: number | null }>('/api/backup/meta')).updatedAt;
 }
 
 /** Replaces the device data with the server backup. Call the data reload afterwards. */
 export async function restoreBackup(): Promise<{ recipes: number }> {
-  const sb = client();
-  const uid = await userId();
-  const { data: row, error } = await sb.from('backups').select('data').eq('user_id', uid).maybeSingle();
-  if (error) throw error;
-  if (!row) throw new Error('no-backup');
-  const backup = row.data as BackupData;
-
-  const refs = [...backup.recipes.map((r) => r.image), backup.profile?.avatar].filter(
-    (u): u is string => !!u && u.startsWith(REF),
-  );
-  const urls = new Map<string, string>();
-  if (refs.length) {
-    const paths = [...new Set(refs)].map((r) => `${uid}/images/${r.slice(REF.length)}`);
-    const { data: signed, error: signError } = await sb.storage.from(BACKUP_BUCKET).createSignedUrls(paths, 600);
-    if (signError) throw signError;
-    for (const s of signed ?? []) if (s.signedUrl && s.path) urls.set(REF + s.path.split('/').pop(), s.signedUrl);
-  }
+  const { data: backup } = await api<{ data: BackupData }>('/api/backup'); // 404 → 'no-backup'
+  const headers = await authHeader();
 
   const download = async (uri: string | undefined, folder: ImageFolder) => {
     if (!uri?.startsWith(REF)) return uri;
-    const url = urls.get(uri);
-    if (!url) return undefined;
     try {
-      return await storeDownloadedImage(url, folder);
+      return await storeDownloadedImage(`${API_URL}/api/images/${encodeURIComponent(uri.slice(REF.length))}`, folder, headers);
     } catch {
       return undefined;
     }
@@ -165,15 +127,9 @@ export async function restoreBackup(): Promise<{ recipes: number }> {
   return { recipes: recipes.length };
 }
 
-/** Deletes the server backup, photos and login. Device data stays. */
+/** Deletes the account, its backup and photos from the server. Device data stays. */
 export async function deleteAccount(): Promise<void> {
-  const sb = client();
-  const uid = await userId();
-  const names = await listImages(uid);
-  if (names.length) await sb.storage.from(BACKUP_BUCKET).remove(names.map((n) => `${uid}/images/${n}`));
-  await sb.from('backups').delete().eq('user_id', uid);
-  const { error } = await sb.rpc('delete_my_account');
-  if (error) throw error;
-  await sb.auth.signOut();
-  await writeJson(KEYS.backupMeta, {});
+  await api('/api/account', { method: 'DELETE' });
+  await setAuth(null);
+  await clearBackupMeta();
 }

@@ -1,0 +1,14 @@
+{
+  "name": "darwish-kitchen-server",
+  "version": "1.0.0",
+  "private": true,
+  "description": "Backup and restore API for Darwish Kitchen (accounts, recipe backups, photos).",
+  "type": "module",
+  "engines": {
+    "node": ">=22.13"
+  },
+  "scripts": {
+    "start": "node --disable-warning=ExperimentalWarning src/server.mjs",
+    "test": "node --disable-warning=ExperimentalWarning --test test/*.test.mjs"
+  }
+}

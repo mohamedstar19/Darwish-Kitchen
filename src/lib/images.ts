@@ -92,9 +92,11 @@ export async function readImageBytes(uri: string): Promise<ArrayBuffer> {
 }
 
 /** Downloads a backed-up image and stores it like a freshly picked one. */
-export async function storeDownloadedImage(url: string, target: ImageFolder): Promise<string> {
+export async function storeDownloadedImage(url: string, target: ImageFolder, headers: Record<string, string> = {}): Promise<string> {
   if (isWeb) {
-    const blob = await (await fetch(url)).blob();
+    const res = await fetch(url, { headers });
+    if (!res.ok) throw new Error(`download-${res.status}`);
+    const blob = await res.blob();
     return new Promise((resolve, reject) => {
       const reader = new FileReader();
       reader.onload = () => resolve(String(reader.result));
@@ -102,6 +104,6 @@ export async function storeDownloadedImage(url: string, target: ImageFolder): Pr
       reader.readAsDataURL(blob);
     });
   }
-  const file = await File.downloadFileAsync(url, new File(folder(target), `${newId()}.jpg`));
+  const file = await File.downloadFileAsync(url, new File(folder(target), `${newId()}.jpg`), { headers });
   return file.uri;
 }

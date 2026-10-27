@@ -5,7 +5,7 @@
 - Expo SDK 58, React Native 0.88, React 19, TypeScript, Expo Router (routes in `src/app`).
 - One codebase for Android, iOS and web. Web is exported as a single-page app (`web.output: "single"`).
 - All data lives on the device in AsyncStorage (`localStorage` on web). Keys are in `src/lib/kv.ts`: recipes, profile, activity (likes/ratings/views), backup meta.
-- Optional Supabase project is used **only** for login + backup/restore (`src/lib/supabase.ts`, `src/lib/backup.ts`). Without `EXPO_PUBLIC_SUPABASE_URL` / `EXPO_PUBLIC_SUPABASE_ANON_KEY` the app runs fully offline.
+- The self-hosted API in `server/` is used **only** for login + backup/restore. The app calls `https://kitchen.darwish-tech.com` (override with `EXPO_PUBLIC_API_URL`; an empty value means same origin). Everything else works offline.
 
 ## Layout
 
@@ -27,8 +27,10 @@
 | `src/app/profile/[section].tsx` | Lists: `added`, `liked`, `rated`, `viewed` |
 | `src/app/account.tsx` | Sign in / sign up; offers restore on a phone that never synced |
 | `src/lib/profile-context.tsx`, `src/lib/activity-context.tsx` | Profile and likes/ratings/views state |
+| `src/lib/api.ts` | API client, saved login token |
 | `src/lib/backup.ts` | Backup, restore, delete account |
-| `supabase/schema.sql` | Server table, private photo bucket, row-level security, `delete_my_account()` |
+| `server/` | Backup API (Node 22, no dependencies, SQLite) + tests |
+| `deploy/` | One-command deploy to the darwish-tech server, nginx site |
 
 ## Suggestions
 
@@ -44,15 +46,23 @@
 - "ضفتها" = saved recipes whose `source` isn't `sample` (includes internet recipes the user saved).
 - Old `Recipe.favorite` flags are migrated to likes the first time the activity store loads.
 
-## Backup and restore
+## Backup server (`server/`)
 
-- Server data: table `backups` (one JSON row per user) and private bucket `backups` with photos at `<user id>/images/<file>.jpg`. RLS limits both to the owner.
+- Node 22.13+ with built-in `node:sqlite`; no npm dependencies. Data in `DATA_DIR` (`kitchen.db` + `images/<user id>/<file>.jpg`).
+- Endpoints: `POST /api/auth/signup|login|logout`, `GET /api/me`, `GET|PUT /api/backup`, `GET /api/backup/meta`, `GET|DELETE /api/images`, `GET|PUT /api/images/:name`, `DELETE /api/account`, `GET /api/health`.
+- Auth: email + password (8+ chars, scrypt). Login returns a random bearer token stored hashed, valid 180 days. Login/signup are limited to 20 tries per IP per 15 minutes (IP from Cloudflare/nginx headers only when the request comes from localhost).
+- Every backup/image route is scoped to the token's user. Image names are validated, uploads must be JPEG (≤ 5 MB, ≤ 2000 per user); backup JSON ≤ 10 MB.
+- Deleting the account removes the user row (sessions and backup cascade) and the photo folder.
+- Production: PM2 process `kitchen` on 127.0.0.1:3020 behind nginx (`deploy/kitchen-nginx.conf`), nightly tarball of the data folder kept 14 days. See `deploy/README.md`.
+
+## Backup and restore (app)
+
 - Backup reads device storage, uploads photos not already on the server (file name = device file name, or a hash for web data URIs), writes the JSON with images as `backup:<file>`, then deletes server photos no longer used.
-- Restore downloads photos via signed URLs, saves them like freshly picked photos, replaces the device data, deletes the replaced photos, and bumps `DataGenerationContext` so providers re-read storage.
-- Safety: after sign-in on a phone that never backed up/restored, the app offers to restore; a first backup from such a phone asks before overwriting a server backup. Sign-out clears the backup meta so a different account never auto-backs up over its data.
+- Restore downloads photos with the login token, saves them like freshly picked photos, replaces the device data, deletes the replaced photos, and bumps `DataGenerationContext` so providers re-read storage.
+- Safety: after sign-in on a phone that never backed up/restored, the app offers to restore; a first backup from such a phone asks before overwriting a server backup. Signing out or switching accounts clears the backup meta so one account never auto-backs up over another's data.
 - Auto backup: once a day on app start while signed in, after the first manual backup.
-- Delete account removes photos and the backup row, then calls `delete_my_account()` (required by the App Store). Device data stays.
-- Not built yet: password reset (needs a deep-link redirect).
+- A 401 from the server clears the saved login so the app shows the sign-in button.
+- Not built yet: password reset (needs email sending on the server).
 
 ## Photos
 
@@ -67,8 +77,8 @@
 
 ## Web deploy
 
-`.github/workflows/deploy-web.yml` runs `npm run build:web` with `WEB_BASE_URL=/<repo>` and publishes `dist/` to GitHub Pages. `scripts/postexport-web.mjs` prefixes the PWA links, adds `404.html` for deep links, and `.nojekyll`. Turn on Pages → Source: GitHub Actions once in repo settings.
+`deploy/update.sh` builds the web app with `WEB_BASE_URL=""` (served at the domain root) and installs it to `/opt/darwish-kitchen/web` on the server. `scripts/postexport-web.mjs` prefixes the PWA links and adds `404.html`. GitHub Actions (`.github/workflows/ci.yml`) only checks: typecheck, web build, server tests.
 
 ## Checks
 
-`npm run typecheck`, `npm run build:web`, and `npx expo export --platform android --platform ios` (bundles native JS without a device). To test backup in a browser without a real project, build with fake `EXPO_PUBLIC_SUPABASE_*` values and stub the Supabase REST/auth/storage calls (e.g. Playwright `page.route`).
+`npm run typecheck`, `npm run build:web`, and `npx expo export --platform android --platform ios` (bundles native JS without a device). `cd server && npm test` covers the API. For an end-to-end run, start the API locally (`PORT=3020 DATA_DIR=./data npm start`) and build/run the web app with `EXPO_PUBLIC_API_URL=http://localhost:3020`.

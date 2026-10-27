@@ -1,71 +1,71 @@
-import type { Session } from '@supabase/supabase-js';
-import { createContext, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
-import { backupNow, getBackupMeta } from './backup';
-import { KEYS, writeJson } from './kv';
-import { backupEnabled, supabase } from './supabase';
+import { createContext, useCallback, useContext, useEffect, useMemo, useState, type ReactNode } from 'react';
+import { api, getAuth, setAuth, type Auth } from './api';
+import { backupNow, clearBackupMeta, getBackupMeta } from './backup';
 
 const AUTO_BACKUP_EVERY = 24 * 60 * 60 * 1000;
 
 type AuthContextValue = {
-  enabled: boolean;
-  session: Session | null;
+  auth: Auth | null;
   email?: string;
   ready: boolean;
   signIn: (email: string, password: string) => Promise<void>;
-  /** Returns true when the account still needs email confirmation. */
-  signUp: (email: string, password: string) => Promise<boolean>;
+  signUp: (email: string, password: string) => Promise<void>;
   signOut: () => Promise<void>;
+  /** Re-reads the saved login (e.g. after the server rejected it). */
+  refresh: () => Promise<void>;
 };
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
+type SessionResponse = { token: string; user: { id: string; email: string } };
+
 export function AuthProvider({ children }: { children: ReactNode }) {
-  const [session, setSession] = useState<Session | null>(null);
-  const [ready, setReady] = useState(!backupEnabled);
+  const [auth, setState] = useState<Auth | null>(null);
+  const [ready, setReady] = useState(false);
+
+  const refresh = useCallback(async () => setState(await getAuth()), []);
 
   useEffect(() => {
-    if (!supabase) return;
-    supabase.auth.getSession().then(({ data }) => {
-      setSession(data.session);
-      setReady(true);
-    });
-    const { data } = supabase.auth.onAuthStateChange((_event, s) => setSession(s));
-    return () => data.subscription.unsubscribe();
-  }, []);
+    refresh().finally(() => setReady(true));
+  }, [refresh]);
 
-  // Quiet daily backup while signed in.
-  const userId = session?.user.id;
+  // Quiet daily backup while signed in, once the user has backed up at least once.
+  const userId = auth?.userId;
   useEffect(() => {
     if (!userId) return;
     getBackupMeta()
       .then((meta) => {
         if (meta.lastBackupAt && Date.now() - meta.lastBackupAt > AUTO_BACKUP_EVERY) return backupNow();
       })
-      .catch(() => {});
-  }, [userId]);
+      .catch(() => refresh());
+  }, [userId, refresh]);
+
+  const start = useCallback(async (path: string, email: string, password: string) => {
+    const res = await api<SessionResponse>(path, { json: { email: email.trim(), password }, auth: false });
+    const next = { token: res.token, email: res.user.email, userId: res.user.id };
+    const previous = await getAuth();
+    // A different account on this phone must never auto-backup over its own data.
+    if (previous?.userId !== next.userId) await clearBackupMeta();
+    await setAuth(next);
+    setState(next);
+  }, []);
 
   const value = useMemo<AuthContextValue>(
     () => ({
-      enabled: backupEnabled,
-      session,
-      email: session?.user.email,
+      auth,
+      email: auth?.email,
       ready,
-      signIn: async (email, password) => {
-        const { error } = await supabase!.auth.signInWithPassword({ email: email.trim(), password });
-        if (error) throw error;
-      },
-      signUp: async (email, password) => {
-        const { data, error } = await supabase!.auth.signUp({ email: email.trim(), password });
-        if (error) throw error;
-        return !data.session;
-      },
+      signIn: (email, password) => start('/api/auth/login', email, password),
+      signUp: (email, password) => start('/api/auth/signup', email, password),
       signOut: async () => {
-        await supabase?.auth.signOut();
-        // Forget the last backup time so another account on this phone never auto-backs up over its data.
-        await writeJson(KEYS.backupMeta, {});
+        await api('/api/auth/logout', { method: 'POST' }).catch(() => {});
+        await setAuth(null);
+        await clearBackupMeta();
+        setState(null);
       },
+      refresh,
     }),
-    [session, ready],
+    [auth, ready, start, refresh],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

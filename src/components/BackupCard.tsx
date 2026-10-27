@@ -14,7 +14,7 @@ type Busy = null | 'backup' | 'restore' | 'delete';
 /** Account + backup controls on the profile tab. */
 export function BackupCard() {
   const c = useTheme();
-  const { enabled, session, email, signOut } = useAuth();
+  const { auth, email, signOut, refresh } = useAuth();
   const reload = useReloadData();
   const [meta, setMeta] = useState<BackupMeta>({});
   const [busy, setBusy] = useState<Busy>(null);
@@ -22,19 +22,10 @@ export function BackupCard() {
   useFocusEffect(
     useCallback(() => {
       getBackupMeta().then(setMeta);
-    }, [session]),
+    }, [auth]),
   );
 
-  if (!enabled) {
-    return (
-      <Card>
-        <Title text="الحساب والنسخ الاحتياطي" />
-        <Muted>بياناتك كلها محفوظة على الموبايل ده. النسخ الاحتياطي على السيرفر لسه مش متفعّل في النسخة دي من التطبيق.</Muted>
-      </Card>
-    );
-  }
-
-  if (!session) {
+  if (!auth) {
     return (
       <Card>
         <Title text="الحساب والنسخ الاحتياطي" />
@@ -45,8 +36,19 @@ export function BackupCard() {
   }
 
   const fail = (title: string, e: unknown) => {
-    const msg = e instanceof Error ? e.message : '';
-    notify(title, msg === 'no-backup' ? 'مفيش نسخة احتياطية على حسابك لسه.' : 'اتأكد من الإنترنت وجرب تاني.');
+    const code = (e as { code?: string }).code;
+    if (code === 'signed-out') {
+      refresh();
+      return notify(title, 'انتهت جلسة الدخول. سجّل دخول تاني.');
+    }
+    notify(
+      title,
+      code === 'no-backup'
+        ? 'مفيش نسخة احتياطية على حسابك لسه.'
+        : code === 'too-large'
+          ? 'النسخة أكبر من المسموح. قلّل عدد الصور وجرب تاني.'
+          : 'اتأكد من الإنترنت وجرب تاني.',
+    );
   };
 
   const doBackup = async () => {
@@ -91,6 +93,7 @@ export function BackupCard() {
     setBusy('delete');
     try {
       await deleteAccount();
+      await refresh();
       setMeta({});
       notify('اتمسح الحساب');
     } catch (e) {
