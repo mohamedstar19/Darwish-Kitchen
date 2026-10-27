@@ -28,6 +28,10 @@ jobs:
       - run: npm run build:web
         env:
           WEB_BASE_URL: /${{ github.event.repository.name }}
+          # Optional: repo Settings → Secrets and variables → Actions → Variables.
+          # Leave unset to ship the web app without account backup.
+          EXPO_PUBLIC_SUPABASE_URL: ${{ vars.EXPO_PUBLIC_SUPABASE_URL }}
+          EXPO_PUBLIC_SUPABASE_ANON_KEY: ${{ vars.EXPO_PUBLIC_SUPABASE_ANON_KEY }}
       - uses: actions/upload-pages-artifact@v3
         with:
           path: dist

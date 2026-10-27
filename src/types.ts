@@ -19,6 +19,7 @@ export type Recipe = {
   prepMinutes?: number;
   servings?: number;
   notes?: string;
+  /** @deprecated Likes now live in the activity store; kept only to migrate old data. */
   favorite?: boolean;
   source: 'user' | 'web' | 'sample';
   sourceUrl?: string;
@@ -49,3 +50,30 @@ export function mealTypeForNow(date = new Date()): MealType {
   if (h >= 11 && h < 17) return 'lunch';
   return 'dinner';
 }
+
+export type Profile = {
+  name: string;
+  bio?: string;
+  phone?: string;
+  /** Device file URI (mobile) or data URI (web). */
+  avatar?: string;
+  updatedAt: number;
+};
+
+/** Points at a saved recipe ("local") or an internet recipe ("web"). */
+export type RecipeRef = {
+  kind: 'local' | 'web';
+  id: string;
+  /** Snapshot for internet recipes so lists can show them offline. */
+  title?: string;
+  image?: string;
+};
+
+export type Activity = {
+  likes: Record<string, { ref: RecipeRef; at: number }>;
+  ratings: Record<string, { ref: RecipeRef; stars: number; at: number }>;
+  /** Most recent first. */
+  views: { ref: RecipeRef; at: number }[];
+};
+
+export const refKey = (ref: Pick<RecipeRef, 'kind' | 'id'>) => `${ref.kind}:${ref.id}`;

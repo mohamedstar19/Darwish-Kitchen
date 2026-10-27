@@ -48,6 +48,14 @@ export default function TabsLayout() {
           tabBarIcon: ({ color, size }) => <Ionicons name="globe-outline" color={String(color)} size={size} />,
         }}
       />
+      <Tabs.Screen
+        name="profile"
+        options={{
+          title: 'حسابي',
+          headerShown: false,
+          tabBarIcon: ({ color, size }) => <Ionicons name="person-circle-outline" color={String(color)} size={size} />,
+        }}
+      />
     </Tabs>
   );
 }

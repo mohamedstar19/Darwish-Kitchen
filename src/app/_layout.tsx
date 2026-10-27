@@ -1,7 +1,11 @@
 import { DarkTheme, DefaultTheme, LocaleProvider, Stack, ThemeProvider } from 'expo-router';
 import { StatusBar } from 'expo-status-bar';
-import { useEffect } from 'react';
+import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react';
 import { I18nManager, Platform, useColorScheme } from 'react-native';
+import { ActivityProvider } from '../lib/activity-context';
+import { AuthProvider } from '../lib/auth-context';
+import { DataGenerationContext } from '../lib/data-reload';
+import { ProfileProvider } from '../lib/profile-context';
 import { RecipesProvider } from '../lib/recipes-context';
 import { useTheme } from '../theme';
 
@@ -32,21 +36,42 @@ export default function RootLayout() {
   return (
     <LocaleProvider direction="rtl">
       <ThemeProvider value={navTheme}>
-        <RecipesProvider>
-          <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
-          <Stack
-            screenOptions={{
-              headerTitleStyle: { fontWeight: '800' },
-              headerBackButtonDisplayMode: 'minimal',
-              contentStyle: { backgroundColor: c.background },
-            }}>
-            <Stack.Screen name="(tabs)" options={{ headerShown: false, title: 'الرئيسية' }} />
-            <Stack.Screen name="recipe/[id]" options={{ title: 'الوصفة' }} />
-            <Stack.Screen name="recipe/edit" options={{ title: 'وصفة جديدة', presentation: 'modal' }} />
-            <Stack.Screen name="online/[id]" options={{ title: 'وصفة من النت' }} />
-          </Stack>
-        </RecipesProvider>
+        <AuthProvider>
+          <DataProviders>
+            <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
+            <Stack
+              screenOptions={{
+                headerTitleStyle: { fontWeight: '800' },
+                headerBackButtonDisplayMode: 'minimal',
+                contentStyle: { backgroundColor: c.background },
+              }}>
+              <Stack.Screen name="(tabs)" options={{ headerShown: false, title: 'الرئيسية' }} />
+              <Stack.Screen name="recipe/[id]" options={{ title: 'الوصفة' }} />
+              <Stack.Screen name="recipe/edit" options={{ title: 'وصفة جديدة', presentation: 'modal' }} />
+              <Stack.Screen name="online/[id]" options={{ title: 'وصفة من النت' }} />
+              <Stack.Screen name="profile/edit" options={{ title: 'الملف الشخصي', presentation: 'modal' }} />
+              <Stack.Screen name="profile/[section]" options={{ title: 'وصفاتي' }} />
+              <Stack.Screen name="account" options={{ title: 'الحساب', presentation: 'modal' }} />
+            </Stack>
+          </DataProviders>
+        </AuthProvider>
       </ThemeProvider>
     </LocaleProvider>
+  );
+}
+
+/** On-device data providers. `reload` makes them re-read storage (used after a restore). */
+function DataProviders({ children }: { children: ReactNode }) {
+  const [generation, setGeneration] = useState(0);
+  const reload = useCallback(() => setGeneration((g) => g + 1), []);
+  const value = useMemo(() => ({ generation, reload }), [generation, reload]);
+  return (
+    <DataGenerationContext.Provider value={value}>
+      <RecipesProvider>
+        <ProfileProvider>
+          <ActivityProvider>{children}</ActivityProvider>
+        </ProfileProvider>
+      </RecipesProvider>
+    </DataGenerationContext.Provider>
   );
 }

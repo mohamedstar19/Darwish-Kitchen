@@ -4,6 +4,7 @@ import { useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, TextInput, View } from 'react-native';
 import { RecipeListItem } from '../../components/RecipeListItem';
 import { Button, Chip, EmptyState } from '../../components/ui';
+import { useActivity } from '../../lib/activity-context';
 import { useRecipes } from '../../lib/recipes-context';
 import { radius, space, useTheme } from '../../theme';
 import { MEAL_LABELS, MEAL_TYPES, type MealType } from '../../types';
@@ -13,23 +14,25 @@ type Filter = 'all' | 'favorite' | MealType;
 export default function RecipesScreen() {
   const c = useTheme();
   const { recipes, ready } = useRecipes();
+  const { activity } = useActivity();
+  const liked = (id: string) => !!activity.likes[`local:${id}`];
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
 
   const visible = useMemo(() => {
     const q = query.trim().toLowerCase();
     return recipes.filter((r) => {
-      if (filter === 'favorite' && !r.favorite) return false;
+      if (filter === 'favorite' && !liked(r.id)) return false;
       if (filter !== 'all' && filter !== 'favorite' && !r.mealTypes.includes(filter)) return false;
       if (!q) return true;
       return r.title.toLowerCase().includes(q) || r.ingredients.some((i) => i.toLowerCase().includes(q));
     });
-  }, [recipes, query, filter]);
+  }, [recipes, query, filter, activity.likes]);
 
   const filters: { key: Filter; label: string }[] = [
     { key: 'all', label: 'الكل' },
     ...MEAL_TYPES.map((m) => ({ key: m as Filter, label: MEAL_LABELS[m] })),
-    { key: 'favorite', label: 'المفضلة' },
+    { key: 'favorite', label: 'عجبتني' },
   ];
 
   return (
@@ -69,7 +72,7 @@ export default function RecipesScreen() {
             image={item.image}
             mealTypes={item.mealTypes}
             minutes={item.prepMinutes}
-            favorite={item.favorite}
+            favorite={liked(item.id)}
             onPress={() => router.push({ pathname: '/recipe/[id]', params: { id: item.id } })}
           />
         )}

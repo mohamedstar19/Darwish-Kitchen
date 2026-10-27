@@ -1,7 +1,10 @@
 import { router, Stack, useLocalSearchParams } from 'expo-router';
+import { useEffect } from 'react';
 import { Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { RecipeBody } from '../../components/RecipeBody';
-import { Badge, Button, EmptyState, Meta, RecipeImage } from '../../components/ui';
+import { StarRating } from '../../components/StarRating';
+import { Badge, Button, Card, EmptyState, Meta, RecipeImage } from '../../components/ui';
+import { useActivity } from '../../lib/activity-context';
 import { confirm } from '../../lib/confirm';
 import { useRecipes } from '../../lib/recipes-context';
 import { space, useTheme } from '../../theme';
@@ -10,8 +13,14 @@ import { MEAL_LABELS } from '../../types';
 export default function RecipeScreen() {
   const c = useTheme();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const { getRecipe, deleteRecipe, toggleFavorite, ready } = useRecipes();
+  const { getRecipe, deleteRecipe, ready } = useRecipes();
+  const { isLiked, toggleLike, ratingOf, rate, recordView } = useActivity();
   const recipe = getRecipe(id);
+  const exists = !!recipe;
+
+  useEffect(() => {
+    if (exists) recordView({ kind: 'local', id });
+  }, [exists, id, recordView]);
 
   if (!recipe) {
     return ready ? <EmptyState icon="alert-circle-outline" title="الوصفة دي مش موجودة" /> : null;
@@ -24,6 +33,9 @@ export default function RecipeScreen() {
       else router.replace('/recipes');
     }
   };
+
+  const ref = { kind: 'local' as const, id: recipe.id };
+  const liked = isLiked(ref);
 
   return (
     <ScrollView style={{ backgroundColor: c.background }} contentContainerStyle={styles.container}>
@@ -45,10 +57,10 @@ export default function RecipeScreen() {
 
       <View style={styles.actions}>
         <Button
-          label={recipe.favorite ? 'في المفضلة' : 'للمفضلة'}
-          icon={recipe.favorite ? 'heart' : 'heart-outline'}
+          label={liked ? 'عجبتني' : 'أعجبني'}
+          icon={liked ? 'heart' : 'heart-outline'}
           variant="secondary"
-          onPress={() => toggleFavorite(recipe.id)}
+          onPress={() => toggleLike(ref)}
           style={{ flex: 1 }}
         />
         <Button
@@ -59,6 +71,11 @@ export default function RecipeScreen() {
           style={{ flex: 1 }}
         />
       </View>
+
+      <Card style={styles.rateCard}>
+        <Text style={[styles.rateLabel, { color: c.text }]}>تقييمك</Text>
+        <StarRating value={ratingOf(ref)} onChange={(stars) => rate(ref, stars)} />
+      </Card>
 
       <RecipeBody ingredients={recipe.ingredients} steps={recipe.steps} notes={recipe.notes} />
 
@@ -75,4 +92,6 @@ const styles = StyleSheet.create({
   title: { fontSize: 26, fontWeight: '900' },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, alignItems: 'center' },
   actions: { flexDirection: 'row', gap: space.sm },
+  rateCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: space.md },
+  rateLabel: { fontSize: 16, fontWeight: '800' },
 });

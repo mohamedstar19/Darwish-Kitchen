@@ -2,7 +2,9 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useEffect, useState } from 'react';
 import { ActivityIndicator, Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { RecipeBody } from '../../components/RecipeBody';
-import { Badge, Button, EmptyState, Muted, RecipeImage } from '../../components/ui';
+import { StarRating } from '../../components/StarRating';
+import { Badge, Button, Card, EmptyState, Muted, RecipeImage } from '../../components/ui';
+import { useActivity } from '../../lib/activity-context';
 import { notify } from '../../lib/confirm';
 import { CATEGORY_AR, getWebRecipe, isAllowed } from '../../lib/mealdb';
 import { useRecipes } from '../../lib/recipes-context';
@@ -17,6 +19,11 @@ export default function OnlineRecipeScreen() {
   const [recipe, setRecipe] = useState<WebRecipe | null>(() => webRecipeCache.get(id) ?? null);
   const [failed, setFailed] = useState(false);
   const [saving, setSaving] = useState(false);
+  const { isLiked, toggleLike, ratingOf, rate, recordView } = useActivity();
+
+  useEffect(() => {
+    if (recipe) recordView({ kind: 'web', id: recipe.webId, title: recipe.title, image: recipe.image });
+  }, [recipe, recordView]);
 
   useEffect(() => {
     if (recipe) return;
@@ -38,6 +45,8 @@ export default function OnlineRecipeScreen() {
   if (!recipe) return <ActivityIndicator color={c.primary} style={{ marginTop: 60 }} />;
 
   const saved = recipes.find((r) => r.webId === recipe.webId);
+  const ref = { kind: 'web' as const, id: recipe.webId, title: recipe.title, image: recipe.image };
+  const liked = isLiked(ref);
   const mealType = MEAL_TYPES.includes(meal as MealType) ? (meal as MealType) : undefined;
 
   const save = async () => {
@@ -72,6 +81,11 @@ export default function OnlineRecipeScreen() {
         <Button label="احفظها في وصفاتي" icon="bookmark-outline" onPress={save} loading={saving} />
       )}
 
+      <Card style={styles.rateCard}>
+        <StarRating value={ratingOf(ref)} onChange={(stars) => rate(ref, stars)} />
+        <Button label={liked ? 'عجبتني' : 'أعجبني'} icon={liked ? 'heart' : 'heart-outline'} variant="ghost" onPress={() => toggleLike(ref)} />
+      </Card>
+
       <RecipeBody ingredients={recipe.ingredients} steps={recipe.steps} ltr />
 
       {recipe.youtube ? <Button label="فيديو الوصفة على يوتيوب" icon="logo-youtube" variant="ghost" onPress={() => Linking.openURL(recipe.youtube!)} /> : null}
@@ -84,4 +98,5 @@ const styles = StyleSheet.create({
   container: { padding: space.lg, gap: space.xl, paddingBottom: 48, maxWidth: 720, width: '100%', alignSelf: 'center' },
   title: { fontSize: 26, fontWeight: '900' },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  rateCard: { flexDirection: 'row', alignItems: 'center', justifyContent: 'space-between', paddingVertical: space.sm },
 });

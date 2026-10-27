@@ -1,5 +1,6 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Recipe, RecipeInput } from '../types';
+import { useDataGeneration } from './data-reload';
 import { newId } from './id';
 import { deleteStoredImage } from './images';
 import { loadRecipes, saveRecipes } from './storage';
@@ -11,7 +12,6 @@ type RecipesContextValue = {
   addRecipe: (input: RecipeInput) => Promise<Recipe>;
   updateRecipe: (id: string, input: Partial<RecipeInput>) => Promise<void>;
   deleteRecipe: (id: string) => Promise<void>;
-  toggleFavorite: (id: string) => Promise<void>;
 };
 
 const RecipesContext = createContext<RecipesContextValue | null>(null);
@@ -20,6 +20,7 @@ export function RecipesProvider({ children }: { children: ReactNode }) {
   const [recipes, setRecipes] = useState<Recipe[]>([]);
   const [ready, setReady] = useState(false);
   const latest = useRef<Recipe[]>([]);
+  const generation = useDataGeneration();
 
   useEffect(() => {
     loadRecipes()
@@ -28,7 +29,7 @@ export function RecipesProvider({ children }: { children: ReactNode }) {
         setRecipes(list);
       })
       .finally(() => setReady(true));
-  }, []);
+  }, [generation]);
 
   // Saves first so a storage error (e.g. full browser storage) reaches the caller.
   const commit = useCallback(async (next: Recipe[]) => {
@@ -57,9 +58,6 @@ export function RecipesProvider({ children }: { children: ReactNode }) {
         const old = latest.current.find((r) => r.id === id);
         await commit(latest.current.filter((r) => r.id !== id));
         deleteStoredImage(old?.image);
-      },
-      toggleFavorite: async (id) => {
-        await commit(latest.current.map((r) => (r.id === id ? { ...r, favorite: !r.favorite } : r)));
       },
     }),
     [recipes, ready, commit],
