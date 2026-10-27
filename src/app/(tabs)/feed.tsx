@@ -1,6 +1,7 @@
 import { router, useFocusEffect } from 'expo-router';
 import { useCallback, useRef, useState } from 'react';
-import { ActivityIndicator, FlatList, RefreshControl, StyleSheet, Text, View } from 'react-native';
+import { ActivityIndicator, FlatList, StyleSheet, Text, View } from 'react-native';
+import { PullToRefresh } from '../../components/PullToRefresh';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { FeedCard } from '../../components/FeedCard';
 import { Button, Chip, EmptyState, Muted } from '../../components/ui';
@@ -18,7 +19,6 @@ export default function FeedScreen() {
   const [posts, setPosts] = useState<FeedPost[] | null>(null);
   const [next, setNext] = useState<number | null>(null);
   const [error, setError] = useState(false);
-  const [refreshing, setRefreshing] = useState(false);
   const [loadingMore, setLoadingMore] = useState(false);
   const request = useRef(0);
 
@@ -67,64 +67,58 @@ export default function FeedScreen() {
   };
 
   return (
-    <FlatList
-      style={{ backgroundColor: c.background }}
-      data={posts ?? []}
-      keyExtractor={(p) => p.id}
-      contentContainerStyle={[styles.list, { paddingTop: insets.top + space.lg }]}
-      refreshControl={
-        <RefreshControl
-          refreshing={refreshing}
-          onRefresh={async () => {
-            setRefreshing(true);
-            await load(category);
-            setRefreshing(false);
-          }}
-        />
-      }
-      onEndReached={more}
-      onEndReachedThreshold={0.5}
-      ListHeaderComponent={
-        <View style={{ gap: space.md }}>
-          <View style={styles.header}>
-            <View style={{ flex: 1 }}>
-              <Text style={[styles.title, { color: c.text }]}>وصفات الشيفات</Text>
-              <Muted>وصفات بيشاركها مستخدمين التطبيق</Muted>
+    <PullToRefresh onRefresh={() => load(category)} top={insets.top} style={{ backgroundColor: c.background }}>
+      {(scroll) => (
+        <FlatList
+          {...scroll}
+          data={posts ?? []}
+          keyExtractor={(p) => p.id}
+          contentContainerStyle={[styles.list, { paddingTop: insets.top + space.lg }]}
+          onEndReached={more}
+          onEndReachedThreshold={0.5}
+          ListHeaderComponent={
+            <View style={{ gap: space.md }}>
+              <View style={styles.header}>
+                <View style={{ flex: 1 }}>
+                  <Text style={[styles.title, { color: c.text }]}>وصفات الشيفات</Text>
+                  <Muted>وصفات بيشاركها مستخدمين التطبيق</Muted>
+                </View>
+                <Button label="انشر وصفة" icon="add" onPress={() => router.push('/recipe/edit')} />
+              </View>
+              <View style={styles.chips}>
+                <Chip label="الكل" selected={!category} onPress={() => choose(undefined)} />
+                {CATEGORIES.map((k) => (
+                  <Chip key={k} label={CATEGORY_LABELS[k]} icon={CATEGORY_ICONS[k]} selected={category === k} onPress={() => choose(k)} />
+                ))}
+              </View>
+              {!posts && !error ? <ActivityIndicator color={c.primary} style={{ marginTop: space.xl }} /> : null}
             </View>
-            <Button label="انشر وصفة" icon="add" onPress={() => router.push('/recipe/edit')} />
-          </View>
-          <View style={styles.chips}>
-            <Chip label="الكل" selected={!category} onPress={() => choose(undefined)} />
-            {CATEGORIES.map((k) => (
-              <Chip key={k} label={CATEGORY_LABELS[k]} icon={CATEGORY_ICONS[k]} selected={category === k} onPress={() => choose(k)} />
-            ))}
-          </View>
-          {!posts && !error ? <ActivityIndicator color={c.primary} style={{ marginTop: space.xl }} /> : null}
-        </View>
-      }
-      renderItem={({ item }) => (
-        <FeedCard
-          post={item}
-          saved={isSaved(item)}
-          onOpen={() => router.push({ pathname: '/feed/[id]', params: { id: item.id } })}
-          onLike={() => onLike(item)}
-          onSave={() => save(item)}
+          }
+          renderItem={({ item }) => (
+            <FeedCard
+              post={item}
+              saved={isSaved(item)}
+              onOpen={() => router.push({ pathname: '/feed/[id]', params: { id: item.id } })}
+              onLike={() => onLike(item)}
+              onSave={() => save(item)}
+            />
+          )}
+          ListEmptyComponent={
+            error ? (
+              <EmptyState icon="cloud-offline-outline" title="مقدرناش نجيب الوصفات" message="اتأكد من الإنترنت واسحب الصفحة لتحت." />
+            ) : posts ? (
+              <EmptyState
+                icon="people-outline"
+                title="لسه مفيش وصفات هنا"
+                message="كن أول شيف ينشر وصفة!"
+                action={<Button label="انشر وصفة" icon="add" onPress={() => router.push('/recipe/edit')} />}
+              />
+            ) : undefined
+          }
+          ListFooterComponent={loadingMore ? <ActivityIndicator color={c.primary} /> : undefined}
         />
       )}
-      ListEmptyComponent={
-        error ? (
-          <EmptyState icon="cloud-offline-outline" title="مقدرناش نجيب الوصفات" message="اتأكد من الإنترنت واسحب الصفحة لتحت." />
-        ) : posts ? (
-          <EmptyState
-            icon="people-outline"
-            title="لسه مفيش وصفات هنا"
-            message="كن أول شيف ينشر وصفة!"
-            action={<Button label="انشر وصفة" icon="add" onPress={() => router.push('/recipe/edit')} />}
-          />
-        ) : undefined
-      }
-      ListFooterComponent={loadingMore ? <ActivityIndicator color={c.primary} /> : undefined}
-    />
+    </PullToRefresh>
   );
 }
 

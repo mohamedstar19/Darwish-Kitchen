@@ -4,9 +4,11 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Avatar } from '../../components/Avatar';
 import { BackupCard } from '../../components/BackupCard';
+import { PullToRefresh } from '../../components/PullToRefresh';
 import { Button, Card, Muted, RecipeImage, type IconName } from '../../components/ui';
 import { openRecipe } from '../../lib/open-recipe';
 import { useAuth } from '../../lib/auth-context';
+import { useReloadData } from '../../lib/data-reload';
 import { useProfile } from '../../lib/profile-context';
 import { SECTION_TITLES, useProfileSections, type ProfileSection } from '../../lib/profile-lists';
 import { radius, space, useTheme } from '../../theme';
@@ -22,65 +24,76 @@ export default function ProfileScreen() {
   const c = useTheme();
   const insets = useSafeAreaInsets();
   const { profile } = useProfile();
-  const { auth } = useAuth();
+  const { auth, refresh } = useAuth();
+  const reload = useReloadData();
   const sections = useProfileSections();
   const recent = sections.viewed.slice(0, 10);
 
   return (
-    <ScrollView style={{ backgroundColor: c.background }} contentContainerStyle={[styles.container, { paddingTop: insets.top + space.lg }]}>
-      <Card style={styles.header}>
-        <Avatar uri={profile.avatar} size={96} />
-        <Text style={[styles.name, { color: c.text }]}>{profile.name || 'أهلاً بيك 👋'}</Text>
-        {profile.bio ? <Muted style={{ textAlign: 'center' }}>{profile.bio}</Muted> : null}
-        {profile.phone ? <Muted style={{ writingDirection: 'ltr' }}>{profile.phone}</Muted> : null}
-        <Button
-          label={profile.name ? 'تعديل الملف الشخصي' : 'اعمل ملفك الشخصي'}
-          icon="create-outline"
-          variant="secondary"
-          onPress={() => router.push('/profile/edit')}
-        />
-      </Card>
+    <PullToRefresh
+      onRefresh={async () => {
+        reload();
+        await refresh();
+      }}
+      top={insets.top}
+      style={{ backgroundColor: c.background }}
+    >
+      {(scroll) => (
+        <ScrollView {...scroll} contentContainerStyle={[styles.container, { paddingTop: insets.top + space.lg }]}>
+          <Card style={styles.header}>
+            <Avatar uri={profile.avatar} size={96} />
+            <Text style={[styles.name, { color: c.text }]}>{profile.name || 'أهلاً بيك 👋'}</Text>
+            {profile.bio ? <Muted style={{ textAlign: 'center' }}>{profile.bio}</Muted> : null}
+            {profile.phone ? <Muted style={{ writingDirection: 'ltr' }}>{profile.phone}</Muted> : null}
+            <Button
+              label={profile.name ? 'تعديل الملف الشخصي' : 'اعمل ملفك الشخصي'}
+              icon="create-outline"
+              variant="secondary"
+              onPress={() => router.push('/profile/edit')}
+            />
+          </Card>
 
-      <View style={styles.stats}>
-        {STATS.map((s) => (
-          <Pressable
-            key={s.key}
-            accessibilityRole="button"
-            accessibilityLabel={SECTION_TITLES[s.key]}
-            onPress={() => router.push({ pathname: '/profile/[section]', params: { section: s.key } })}
-            style={({ pressed }) => [styles.stat, { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.8 : 1 }]}>
-            <Ionicons name={s.icon} size={22} color={c.primary} />
-            <Text style={[styles.statNum, { color: c.text }]}>{sections[s.key].length}</Text>
-            <Text style={{ color: c.muted, fontSize: 13 }}>{s.label}</Text>
-          </Pressable>
-        ))}
-      </View>
-
-      {recent.length ? (
-        <View style={{ gap: space.sm }}>
-          <View style={styles.sectionHead}>
-            <Text style={[styles.sectionTitle, { color: c.text }]}>آخر وصفات شفتها</Text>
-            <Button label="الكل" variant="ghost" onPress={() => router.push({ pathname: '/profile/[section]', params: { section: 'viewed' } })} />
-          </View>
-          <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.md }}>
-            {recent.map((item) => (
-              <Pressable key={item.key} onPress={() => openRecipe(item.ref)} style={styles.recentItem} accessibilityRole="button">
-                <RecipeImage uri={item.image} height={100} iconSize={30} />
-                <Text numberOfLines={2} style={{ color: c.text, fontWeight: '700', fontSize: 13 }}>
-                  {item.title}
-                </Text>
+          <View style={styles.stats}>
+            {STATS.map((s) => (
+              <Pressable
+                key={s.key}
+                accessibilityRole="button"
+                accessibilityLabel={SECTION_TITLES[s.key]}
+                onPress={() => router.push({ pathname: '/profile/[section]', params: { section: s.key } })}
+                style={({ pressed }) => [styles.stat, { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.8 : 1 }]}
+              >
+                <Ionicons name={s.icon} size={22} color={c.primary} />
+                <Text style={[styles.statNum, { color: c.text }]}>{sections[s.key].length}</Text>
+                <Text style={{ color: c.muted, fontSize: 13 }}>{s.label}</Text>
               </Pressable>
             ))}
-          </ScrollView>
-        </View>
-      ) : null}
+          </View>
 
-      {auth?.isAdmin ? (
-        <Button label="لوحة التحكم (صور ووصفات للكل)" icon="construct-outline" onPress={() => router.push('/admin')} />
-      ) : null}
+          {recent.length ? (
+            <View style={{ gap: space.sm }}>
+              <View style={styles.sectionHead}>
+                <Text style={[styles.sectionTitle, { color: c.text }]}>آخر وصفات شفتها</Text>
+                <Button label="الكل" variant="ghost" onPress={() => router.push({ pathname: '/profile/[section]', params: { section: 'viewed' } })} />
+              </View>
+              <ScrollView horizontal showsHorizontalScrollIndicator={false} contentContainerStyle={{ gap: space.md }}>
+                {recent.map((item) => (
+                  <Pressable key={item.key} onPress={() => openRecipe(item.ref)} style={styles.recentItem} accessibilityRole="button">
+                    <RecipeImage uri={item.image} height={100} iconSize={30} />
+                    <Text numberOfLines={2} style={{ color: c.text, fontWeight: '700', fontSize: 13 }}>
+                      {item.title}
+                    </Text>
+                  </Pressable>
+                ))}
+              </ScrollView>
+            </View>
+          ) : null}
 
-      <BackupCard />
-    </ScrollView>
+          {auth?.isAdmin ? <Button label="لوحة التحكم (صور ووصفات للكل)" icon="construct-outline" onPress={() => router.push('/admin')} /> : null}
+
+          <BackupCard />
+        </ScrollView>
+      )}
+    </PullToRefresh>
   );
 }
 

@@ -2,9 +2,11 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import { useEffect, useMemo, useState } from 'react';
 import { FlatList, Pressable, StyleSheet, Text, TextInput, View } from 'react-native';
+import { PullToRefresh } from '../../components/PullToRefresh';
 import { RecipeListItem } from '../../components/RecipeListItem';
 import { Button, Chip, EmptyState } from '../../components/ui';
 import { useActivity } from '../../lib/activity-context';
+import { useReloadData } from '../../lib/data-reload';
 import { useRecipes } from '../../lib/recipes-context';
 import { radius, space, useTheme } from '../../theme';
 import { CATEGORIES, CATEGORY_ICONS, CATEGORY_LABELS, categoryOf, MEAL_LABELS, MEAL_TYPES, type MealType, type RecipeCategory } from '../../types';
@@ -18,6 +20,7 @@ export default function RecipesScreen() {
   const c = useTheme();
   const { recipes, ready } = useRecipes();
   const { activity } = useActivity();
+  const reload = useReloadData();
   const liked = (id: string) => !!activity.likes[`local:${id}`];
   const [query, setQuery] = useState('');
   const [filter, setFilter] = useState<Filter>('all');
@@ -57,84 +60,93 @@ export default function RecipesScreen() {
 
   return (
     <View style={{ flex: 1, backgroundColor: c.background }}>
-      <FlatList
-        data={visible}
-        keyExtractor={(r) => r.id}
-        contentContainerStyle={styles.list}
-        ListHeaderComponent={
-          <View style={{ gap: space.md }}>
-            <View style={[styles.sections, { backgroundColor: c.cardAlt }]}>
-              {(['all', ...CATEGORIES] as Section[]).map((key) => {
-                const selected = section === key;
-                return (
-                  <Pressable
-                    key={key}
-                    accessibilityRole="tab"
-                    accessibilityState={{ selected }}
-                    onPress={() => chooseSection(key)}
-                    style={[styles.section, selected && { backgroundColor: c.card }]}>
-                    {key !== 'all' ? <Ionicons name={CATEGORY_ICONS[key]} size={16} color={selected ? c.primary : c.muted} /> : null}
-                    <Text style={[styles.sectionText, { color: selected ? c.primary : c.muted }]}>
-                      {key === 'all' ? 'الكل' : CATEGORY_LABELS[key]}
-                    </Text>
-                  </Pressable>
-                );
-              })}
-            </View>
-            <View style={[styles.search, { backgroundColor: c.card, borderColor: c.border }]}>
-              <Ionicons name="search" size={18} color={c.muted} />
-              <TextInput
-                value={query}
-                onChangeText={setQuery}
-                placeholder="دوّر بالاسم أو بمكوّن…"
-                placeholderTextColor={c.muted}
-                style={[styles.input, { color: c.text }]}
-                returnKeyType="search"
+      <PullToRefresh
+        onRefresh={async () => {
+          reload();
+          await new Promise((r) => setTimeout(r, 500));
+        }}
+      >
+        {(scroll) => (
+          <FlatList
+            {...scroll}
+            data={visible}
+            keyExtractor={(r) => r.id}
+            contentContainerStyle={styles.list}
+            ListHeaderComponent={
+              <View style={{ gap: space.md }}>
+                <View style={[styles.sections, { backgroundColor: c.cardAlt }]}>
+                  {(['all', ...CATEGORIES] as Section[]).map((key) => {
+                    const selected = section === key;
+                    return (
+                      <Pressable
+                        key={key}
+                        accessibilityRole="tab"
+                        accessibilityState={{ selected }}
+                        onPress={() => chooseSection(key)}
+                        style={[styles.section, selected && { backgroundColor: c.card }]}
+                      >
+                        {key !== 'all' ? <Ionicons name={CATEGORY_ICONS[key]} size={16} color={selected ? c.primary : c.muted} /> : null}
+                        <Text style={[styles.sectionText, { color: selected ? c.primary : c.muted }]}>{key === 'all' ? 'الكل' : CATEGORY_LABELS[key]}</Text>
+                      </Pressable>
+                    );
+                  })}
+                </View>
+                <View style={[styles.search, { backgroundColor: c.card, borderColor: c.border }]}>
+                  <Ionicons name="search" size={18} color={c.muted} />
+                  <TextInput
+                    value={query}
+                    onChangeText={setQuery}
+                    placeholder="دوّر بالاسم أو بمكوّن…"
+                    placeholderTextColor={c.muted}
+                    style={[styles.input, { color: c.text }]}
+                    returnKeyType="search"
+                  />
+                  {query ? (
+                    <Pressable onPress={() => setQuery('')} accessibilityLabel="مسح">
+                      <Ionicons name="close-circle" size={18} color={c.muted} />
+                    </Pressable>
+                  ) : null}
+                </View>
+                <View style={styles.chips}>
+                  {filters.map((f) => (
+                    <Chip key={f.key} label={f.label} selected={filter === f.key} onPress={() => setFilter(f.key)} />
+                  ))}
+                </View>
+              </View>
+            }
+            renderItem={({ item }) => (
+              <RecipeListItem
+                title={item.title}
+                image={item.image}
+                mealTypes={item.mealTypes}
+                category={categoryOf(item)}
+                minutes={item.prepMinutes}
+                favorite={liked(item.id)}
+                onPress={() => router.push({ pathname: '/recipe/[id]', params: { id: item.id } })}
               />
-              {query ? (
-                <Pressable onPress={() => setQuery('')} accessibilityLabel="مسح">
-                  <Ionicons name="close-circle" size={18} color={c.muted} />
-                </Pressable>
-              ) : null}
-            </View>
-            <View style={styles.chips}>
-              {filters.map((f) => (
-                <Chip key={f.key} label={f.label} selected={filter === f.key} onPress={() => setFilter(f.key)} />
-              ))}
-            </View>
-          </View>
-        }
-        renderItem={({ item }) => (
-          <RecipeListItem
-            title={item.title}
-            image={item.image}
-            mealTypes={item.mealTypes}
-            category={categoryOf(item)}
-            minutes={item.prepMinutes}
-            favorite={liked(item.id)}
-            onPress={() => router.push({ pathname: '/recipe/[id]', params: { id: item.id } })}
+            )}
+            ListEmptyComponent={
+              ready ? (
+                recipes.length ? (
+                  <EmptyState icon="search-outline" title="مفيش نتايج" message="جرّب كلمة تانية أو فلتر تاني." />
+                ) : (
+                  <EmptyState
+                    icon="book-outline"
+                    title="دي مساحتك يا شيف 👨‍🍳"
+                    message="هنا هتلاقي الوصفات اللي بتضيفها بصورها، واللي بتحفظها من الشيفات ومن النت."
+                    action={
+                      <View style={{ gap: space.sm, alignSelf: 'stretch' }}>
+                        <Button label="ضيف أول وصفة" icon="add" onPress={() => router.push('/recipe/edit')} />
+                        <Button label="شوف وصفات درويش" icon="restaurant-outline" variant="secondary" onPress={() => router.push('/darwish')} />
+                      </View>
+                    }
+                  />
+                )
+              ) : undefined
+            }
           />
         )}
-        ListEmptyComponent={
-          ready ? (
-            recipes.length ? (
-              <EmptyState icon="search-outline" title="مفيش نتايج" message="جرّب كلمة تانية أو فلتر تاني." />
-            ) : (
-              <EmptyState
-                icon="book-outline"
-                title="دي مساحتك يا شيف 👨‍🍳"
-                message="هنا هتلاقي الوصفات اللي بتضيفها بصورها، واللي بتحفظها من الشيفات ومن النت."
-                action={
-                  <View style={{ gap: space.sm, alignSelf: 'stretch' }}>
-                    <Button label="ضيف أول وصفة" icon="add" onPress={() => router.push('/recipe/edit')} />
-                    <Button label="شوف وصفات درويش" icon="restaurant-outline" variant="secondary" onPress={() => router.push('/darwish')} />
-                  </View>
-                }
-              />
-            )
-          ) : undefined
-        }
-      />
+      </PullToRefresh>
       <View style={styles.fabWrap} pointerEvents="box-none">
         <Button
           label={section === 'healthy-drink' ? 'إضافة مشروب' : section === 'juice' ? 'إضافة عصير' : 'إضافة وصفة'}
@@ -153,7 +165,18 @@ const styles = StyleSheet.create({
   input: { flex: 1, fontSize: 16, paddingVertical: 10 },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   sections: { flexDirection: 'row', borderRadius: radius.md, padding: 4, gap: 4 },
-  section: { flexGrow: 1, flexShrink: 0, flexBasis: 'auto', flexDirection: 'row', alignItems: 'center', justifyContent: 'center', gap: 4, minHeight: 40, borderRadius: radius.sm, paddingHorizontal: 8 },
+  section: {
+    flexGrow: 1,
+    flexShrink: 0,
+    flexBasis: 'auto',
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    gap: 4,
+    minHeight: 40,
+    borderRadius: radius.sm,
+    paddingHorizontal: 8,
+  },
   sectionText: { fontSize: 13, fontWeight: '800' },
   fabWrap: { position: 'absolute', bottom: space.lg, start: 0, end: 0, alignItems: 'center' },
   fab: { shadowColor: '#000', shadowOpacity: 0.2, shadowRadius: 8, shadowOffset: { width: 0, height: 3 }, elevation: 4 },

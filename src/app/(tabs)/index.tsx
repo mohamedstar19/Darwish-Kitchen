@@ -6,6 +6,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Badge, Button, Card, Chip, Meta, Muted, RecipeImage } from '../../components/ui';
 import { CATEGORY_AR } from '../../lib/mealdb';
 import { DarwishSlider } from '../../components/DarwishSlider';
+import { PullToRefresh } from '../../components/PullToRefresh';
 import { useActivity } from '../../lib/activity-context';
 import { aiErrorMessage } from '../../lib/ai-tools';
 import { useAuth } from '../../lib/auth-context';
@@ -67,8 +68,7 @@ export default function HomeScreen() {
     setLoading(true);
     try {
       const pool = { mine: recipes, darwish: darwish.recipes };
-      const result =
-        source === 'smart' ? await smartSuggest(meal, pool, activity, recent.current) : await suggestMeal(meal, source, pool, recent.current);
+      const result = source === 'smart' ? await smartSuggest(meal, pool, activity, recent.current) : await suggestMeal(meal, source, pool, recent.current);
       const id = result.kind === 'web' ? result.recipe.webId : result.recipe.id;
       recent.current = [id, ...recent.current].slice(0, 5);
       if (result.kind === 'web') rememberWebRecipe(result.recipe);
@@ -88,8 +88,7 @@ export default function HomeScreen() {
     }
   };
 
-  const savedWeb =
-    suggestion?.kind === 'web' ? recipes.find((r) => r.webId === suggestion.recipe.webId) : undefined;
+  const savedWeb = suggestion?.kind === 'web' ? recipes.find((r) => r.webId === suggestion.recipe.webId) : undefined;
 
   const saveWeb = async () => {
     if (suggestion?.kind !== 'web') return;
@@ -111,148 +110,157 @@ export default function HomeScreen() {
   };
 
   return (
-    <ScrollView
-      style={{ backgroundColor: c.background }}
-      contentContainerStyle={[styles.container, { paddingTop: insets.top + space.lg }]}>
-      <View style={styles.header}>
-        <Image source={require('../../../assets/logo.png')} style={styles.logo} accessibilityLabel="Darwish Kitchen" />
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.appName, { color: c.text }]}>Darwish Kitchen</Text>
-          <Muted>{greeting()} 👋 يلا نختار أكلة النهارده</Muted>
-        </View>
-      </View>
-
-      <DarwishSlider />
-
-      <Card>
-        <Text style={[styles.label, { color: c.text }]}>الوجبة</Text>
-        <View style={styles.chips}>
-          {MEAL_TYPES.map((m) => (
-            <Chip key={m} label={MEAL_LABELS[m]} icon={MEAL_ICONS[m]} selected={meal === m} onPress={() => setMeal(m)} />
-          ))}
-        </View>
-        <Text style={[styles.label, { color: c.text }]}>نقترح منين؟</Text>
-        <View style={styles.chips}>
-          {SOURCES.map((s) => (
-            <Chip
-              key={s.key}
-              label={s.label}
-              selected={source === s.key}
-              onPress={() => {
-                pickedSource.current = true;
-                setSource(s.key);
-              }}
-            />
-          ))}
-        </View>
-      </Card>
-
-      <Button big icon={source === 'smart' ? 'sparkles' : 'dice'} label="حناكل إيه النهارده؟" onPress={ask} loading={loading} />
-
-      <Pressable
-        accessibilityRole="button"
-        accessibilityLabel="عندي في التلاجة"
-        onPress={() => router.push('/ai/fridge')}
-        style={({ pressed }) => [styles.fridge, { backgroundColor: c.accentSoft, borderColor: c.border, opacity: pressed ? 0.85 : 1 }]}>
-        <Text style={styles.fridgeEmoji}>🧊</Text>
-        <View style={{ flex: 1 }}>
-          <Text style={[styles.tileTitle, { color: c.text }]}>عندي في التلاجة…</Text>
-          <Muted style={{ fontSize: 13 }}>اكتب أو صوّر اللي عندك، والذكاء الاصطناعي يقولك تعمل إيه</Muted>
-        </View>
-        <Ionicons name="chevron-back" size={20} color={c.muted} />
-      </Pressable>
-
-      {error === 'login' ? (
-        <Card>
-          <Muted>الاقتراح الذكي بيختارلك على ذوقك (اللي عجبك وقيّمته واللي شفته قريب) وعلى حسب الوقت واليوم. محتاج تسجّل برقم موبايلك الأول.</Muted>
-          <Button label="سجّل برقم الموبايل" icon="phone-portrait-outline" variant="secondary" onPress={() => router.push('/account')} />
-        </Card>
-      ) : error ? (
-        <Card style={{ borderColor: c.danger }}>
-          <Text style={{ color: c.danger, fontSize: 15, lineHeight: 23 }}>{error}</Text>
-        </Card>
-      ) : null}
-
-      {suggestion ? (
-        <Card style={{ padding: 0, overflow: 'hidden' }}>
-          <RecipeImage uri={suggestion.recipe.image} height={220} rounded={false} />
-          <View style={styles.resultBody}>
-            <View style={styles.chips}>
-              <Badge label={`${MEAL_LABELS[meal]} النهارده`} />
-              <Badge
-                label={
-                  suggestion.kind === 'local'
-                    ? 'من وصفاتي'
-                    : suggestion.kind === 'darwish'
-                      ? 'من مطبخ درويش'
-                      : suggestion.kind === 'web' && suggestion.recipe.ai?.generated
-                        ? '✨ فكرة جديدة'
-                        : 'من النت'
-                }
-                tone={suggestion.kind === 'web' ? 'muted' : 'accent'}
-              />
+    <PullToRefresh onRefresh={darwish.refresh} top={insets.top} style={{ backgroundColor: c.background }}>
+      {(scroll) => (
+        <ScrollView {...scroll} contentContainerStyle={[styles.container, { paddingTop: insets.top + space.lg }]}>
+          <View style={styles.header}>
+            <Image source={require('../../../assets/logo.png')} style={styles.logo} accessibilityLabel="Darwish Kitchen" />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.appName, { color: c.text }]}>Darwish Kitchen</Text>
+              <Muted>{greeting()} 👋 يلا نختار أكلة النهارده</Muted>
             </View>
-            <Text style={[styles.resultTitle, { color: c.text }]}>{suggestion.recipe.title}</Text>
-            {suggestion.reason ? (
-              <View style={[styles.reason, { backgroundColor: c.primarySoft }]}>
-                <Ionicons name="sparkles" size={16} color={c.primary} />
-                <Text style={[styles.reasonText, { color: c.text }]}>{suggestion.reason}</Text>
-              </View>
-            ) : null}
-            <View style={styles.chips}>
-              {suggestion.kind !== 'web' && suggestion.recipe.prepMinutes ? (
-                <Meta icon="hourglass-outline" label={`${suggestion.recipe.prepMinutes} دقيقة`} />
-              ) : null}
-              {suggestion.kind === 'web' && !suggestion.recipe.ai && suggestion.recipe.category ? (
-                <Meta icon="pricetag-outline" label={CATEGORY_AR[suggestion.recipe.category] ?? suggestion.recipe.category} />
-              ) : null}
-              <Meta icon="list-outline" label={`${suggestion.recipe.ingredients.length} مكون`} />
-            </View>
-            {suggestion.kind === 'web' && !suggestion.recipe.ai ? <Muted>الوصفة دي من موقع TheMealDB ومكتوبة بالإنجليزي.</Muted> : null}
-            <View style={styles.actions}>
-              <Button label="شوف الوصفة" icon="book-outline" onPress={open} style={{ flex: 1 }} />
-              <Button label="غيرها" icon="refresh" variant="secondary" onPress={ask} loading={loading} style={{ flex: 1 }} />
-            </View>
-            {suggestion.kind === 'web' ? (
-              savedWeb ? (
-                <Button label="محفوظة في وصفاتي" icon="checkmark-circle" variant="ghost" onPress={() => router.push({ pathname: '/recipe/[id]', params: { id: savedWeb.id } })} />
-              ) : (
-                <Button label="احفظها في وصفاتي" icon="bookmark-outline" variant="ghost" onPress={saveWeb} loading={saving} />
-              )
-            ) : null}
           </View>
-        </Card>
-      ) : !error && !loading ? (
-        <View style={[styles.hint, { borderColor: c.border }]}>
-          <Ionicons name="sparkles-outline" size={28} color={c.primary} />
-          <Muted style={{ textAlign: 'center' }}>
-            {source === 'smart'
-              ? 'اختار الوجبة ودوس على الزرار، والذكاء الاصطناعي يختارلك أكلة على ذوقك وعلى حسب الوقت، ويقولك ليه.'
-              : 'اختار الوجبة ودوس على الزرار، وإحنا نقترح عليك أكلة من وصفاتك ومطبخ درويش أو من النت.'}
-          </Muted>
-        </View>
-      ) : null}
 
-      <View style={{ gap: space.sm }}>
-        <Text style={[styles.label, { color: c.text, fontSize: 18 }]}>عايز تشرب حاجة؟</Text>
-        <View style={styles.actions}>
-          {DRINK_SECTIONS.map(({ key, hint }) => (
-            <Pressable
-              key={key}
-              accessibilityRole="button"
-              accessibilityLabel={CATEGORY_LABELS[key]}
-              onPress={() => router.push({ pathname: '/darwish', params: { section: key } })}
-              style={({ pressed }) => [styles.tile, { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.85 : 1 }]}>
-              <View style={[styles.tileIcon, { backgroundColor: key === 'juice' ? c.primarySoft : c.accentSoft }]}>
-                <Ionicons name={CATEGORY_ICONS[key]} size={24} color={key === 'juice' ? c.primary : c.accent} />
+          <DarwishSlider />
+
+          <Card>
+            <Text style={[styles.label, { color: c.text }]}>الوجبة</Text>
+            <View style={styles.chips}>
+              {MEAL_TYPES.map((m) => (
+                <Chip key={m} label={MEAL_LABELS[m]} icon={MEAL_ICONS[m]} selected={meal === m} onPress={() => setMeal(m)} />
+              ))}
+            </View>
+            <Text style={[styles.label, { color: c.text }]}>نقترح منين؟</Text>
+            <View style={styles.chips}>
+              {SOURCES.map((s) => (
+                <Chip
+                  key={s.key}
+                  label={s.label}
+                  selected={source === s.key}
+                  onPress={() => {
+                    pickedSource.current = true;
+                    setSource(s.key);
+                  }}
+                />
+              ))}
+            </View>
+          </Card>
+
+          <Button big icon={source === 'smart' ? 'sparkles' : 'dice'} label="حناكل إيه النهارده؟" onPress={ask} loading={loading} />
+
+          <Pressable
+            accessibilityRole="button"
+            accessibilityLabel="عندي في التلاجة"
+            onPress={() => router.push('/ai/fridge')}
+            style={({ pressed }) => [styles.fridge, { backgroundColor: c.accentSoft, borderColor: c.border, opacity: pressed ? 0.85 : 1 }]}
+          >
+            <Text style={styles.fridgeEmoji}>🧊</Text>
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.tileTitle, { color: c.text }]}>عندي في التلاجة…</Text>
+              <Muted style={{ fontSize: 13 }}>اكتب أو صوّر اللي عندك، والذكاء الاصطناعي يقولك تعمل إيه</Muted>
+            </View>
+            <Ionicons name="chevron-back" size={20} color={c.muted} />
+          </Pressable>
+
+          {error === 'login' ? (
+            <Card>
+              <Muted>الاقتراح الذكي بيختارلك على ذوقك (اللي عجبك وقيّمته واللي شفته قريب) وعلى حسب الوقت واليوم. محتاج تسجّل برقم موبايلك الأول.</Muted>
+              <Button label="سجّل برقم الموبايل" icon="phone-portrait-outline" variant="secondary" onPress={() => router.push('/account')} />
+            </Card>
+          ) : error ? (
+            <Card style={{ borderColor: c.danger }}>
+              <Text style={{ color: c.danger, fontSize: 15, lineHeight: 23 }}>{error}</Text>
+            </Card>
+          ) : null}
+
+          {suggestion ? (
+            <Card style={{ padding: 0, overflow: 'hidden' }}>
+              <RecipeImage uri={suggestion.recipe.image} height={220} rounded={false} />
+              <View style={styles.resultBody}>
+                <View style={styles.chips}>
+                  <Badge label={`${MEAL_LABELS[meal]} النهارده`} />
+                  <Badge
+                    label={
+                      suggestion.kind === 'local'
+                        ? 'من وصفاتي'
+                        : suggestion.kind === 'darwish'
+                          ? 'من مطبخ درويش'
+                          : suggestion.kind === 'web' && suggestion.recipe.ai?.generated
+                            ? '✨ فكرة جديدة'
+                            : 'من النت'
+                    }
+                    tone={suggestion.kind === 'web' ? 'muted' : 'accent'}
+                  />
+                </View>
+                <Text style={[styles.resultTitle, { color: c.text }]}>{suggestion.recipe.title}</Text>
+                {suggestion.reason ? (
+                  <View style={[styles.reason, { backgroundColor: c.primarySoft }]}>
+                    <Ionicons name="sparkles" size={16} color={c.primary} />
+                    <Text style={[styles.reasonText, { color: c.text }]}>{suggestion.reason}</Text>
+                  </View>
+                ) : null}
+                <View style={styles.chips}>
+                  {suggestion.kind !== 'web' && suggestion.recipe.prepMinutes ? (
+                    <Meta icon="hourglass-outline" label={`${suggestion.recipe.prepMinutes} دقيقة`} />
+                  ) : null}
+                  {suggestion.kind === 'web' && !suggestion.recipe.ai && suggestion.recipe.category ? (
+                    <Meta icon="pricetag-outline" label={CATEGORY_AR[suggestion.recipe.category] ?? suggestion.recipe.category} />
+                  ) : null}
+                  <Meta icon="list-outline" label={`${suggestion.recipe.ingredients.length} مكون`} />
+                </View>
+                {suggestion.kind === 'web' && !suggestion.recipe.ai ? <Muted>الوصفة دي من موقع TheMealDB ومكتوبة بالإنجليزي.</Muted> : null}
+                <View style={styles.actions}>
+                  <Button label="شوف الوصفة" icon="book-outline" onPress={open} style={{ flex: 1 }} />
+                  <Button label="غيرها" icon="refresh" variant="secondary" onPress={ask} loading={loading} style={{ flex: 1 }} />
+                </View>
+                {suggestion.kind === 'web' ? (
+                  savedWeb ? (
+                    <Button
+                      label="محفوظة في وصفاتي"
+                      icon="checkmark-circle"
+                      variant="ghost"
+                      onPress={() => router.push({ pathname: '/recipe/[id]', params: { id: savedWeb.id } })}
+                    />
+                  ) : (
+                    <Button label="احفظها في وصفاتي" icon="bookmark-outline" variant="ghost" onPress={saveWeb} loading={saving} />
+                  )
+                ) : null}
               </View>
-              <Text style={[styles.tileTitle, { color: c.text }]}>{CATEGORY_LABELS[key]}</Text>
-              <Muted style={{ fontSize: 12 }}>{`${darwish.recipes.filter((r) => categoryOf(r) === key).length} وصفة • ${hint}`}</Muted>
-            </Pressable>
-          ))}
-        </View>
-      </View>
-    </ScrollView>
+            </Card>
+          ) : !error && !loading ? (
+            <View style={[styles.hint, { borderColor: c.border }]}>
+              <Ionicons name="sparkles-outline" size={28} color={c.primary} />
+              <Muted style={{ textAlign: 'center' }}>
+                {source === 'smart'
+                  ? 'اختار الوجبة ودوس على الزرار، والذكاء الاصطناعي يختارلك أكلة على ذوقك وعلى حسب الوقت، ويقولك ليه.'
+                  : 'اختار الوجبة ودوس على الزرار، وإحنا نقترح عليك أكلة من وصفاتك ومطبخ درويش أو من النت.'}
+              </Muted>
+            </View>
+          ) : null}
+
+          <View style={{ gap: space.sm }}>
+            <Text style={[styles.label, { color: c.text, fontSize: 18 }]}>عايز تشرب حاجة؟</Text>
+            <View style={styles.actions}>
+              {DRINK_SECTIONS.map(({ key, hint }) => (
+                <Pressable
+                  key={key}
+                  accessibilityRole="button"
+                  accessibilityLabel={CATEGORY_LABELS[key]}
+                  onPress={() => router.push({ pathname: '/darwish', params: { section: key } })}
+                  style={({ pressed }) => [styles.tile, { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.85 : 1 }]}
+                >
+                  <View style={[styles.tileIcon, { backgroundColor: key === 'juice' ? c.primarySoft : c.accentSoft }]}>
+                    <Ionicons name={CATEGORY_ICONS[key]} size={24} color={key === 'juice' ? c.primary : c.accent} />
+                  </View>
+                  <Text style={[styles.tileTitle, { color: c.text }]}>{CATEGORY_LABELS[key]}</Text>
+                  <Muted style={{ fontSize: 12 }}>{`${darwish.recipes.filter((r) => categoryOf(r) === key).length} وصفة • ${hint}`}</Muted>
+                </Pressable>
+              ))}
+            </View>
+          </View>
+        </ScrollView>
+      )}
+    </PullToRefresh>
   );
 }
 

@@ -148,6 +148,10 @@ All Claude calls are on the server (`claude-opus-5-5`, effort `low`, `fallbacks:
 - Mobile: the picked photo is resized to max 1400px, saved as JPEG in `Paths.document/recipe-images/`, and deleted when its recipe is deleted or its photo replaced.
 - Web: resized to 900px and stored as a JPEG data URI inside the recipe (~20–150 KB each). Browser storage is about 5 MB, so a save error is shown if it fills up.
 
+## Pull to refresh
+
+`src/components/PullToRefresh.tsx` wraps a list or scroll view (render prop). Phones use `RefreshControl`; on the web (browser and the home-screen app) the page scrolls inside the app, so the browser's own pull-to-refresh never fires: the component follows the finger while the list is at the top, shows a spinner and calls `onRefresh` after a long enough pull (`overscroll-behavior-y: contain` stops the browser from reloading the page). Used on home (Darwish catalog), chefs feed, وصفاتي, حسابي and the Darwish list.
+
 ## Arabic / RTL
 
 - Native builds force RTL via `expo-localization` (`forcesRTL`). In Expo Go, `_layout.tsx` calls `I18nManager.forceRTL`, which applies after one app restart.
