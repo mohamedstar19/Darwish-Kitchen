@@ -1,7 +1,7 @@
 import { Ionicons } from '@expo/vector-icons';
 import { router } from 'expo-router';
 import { useRef, useState } from 'react';
-import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Image, Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Badge, Button, Card, Chip, Meta, Muted, RecipeImage } from '../../components/ui';
 import { CATEGORY_AR } from '../../lib/mealdb';
@@ -94,9 +94,7 @@ export default function HomeScreen() {
       style={{ backgroundColor: c.background }}
       contentContainerStyle={[styles.container, { paddingTop: insets.top + space.lg }]}>
       <View style={styles.header}>
-        <View style={[styles.logo, { backgroundColor: c.primary }]}>
-          <Ionicons name="restaurant" size={26} color={c.primaryText} />
-        </View>
+        <Image source={require('../../../assets/logo.png')} style={styles.logo} accessibilityLabel="Darwish Kitchen" />
         <View style={{ flex: 1 }}>
           <Text style={[styles.appName, { color: c.text }]}>Darwish Kitchen</Text>
           <Muted>{greeting()} 👋 يلا نختار أكلة النهارده</Muted>
@@ -196,7 +194,7 @@ export default function HomeScreen() {
 const styles = StyleSheet.create({
   container: { padding: space.lg, gap: space.lg, paddingBottom: 40, maxWidth: 720, width: '100%', alignSelf: 'center' },
   header: { flexDirection: 'row', alignItems: 'center', gap: space.md },
-  logo: { width: 52, height: 52, borderRadius: radius.md, alignItems: 'center', justifyContent: 'center' },
+  logo: { width: 56, height: 56, borderRadius: radius.md },
   appName: { fontSize: 26, fontWeight: '900' },
   label: { fontSize: 15, fontWeight: '700' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },

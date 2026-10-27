@@ -120,6 +120,10 @@
 
 `deploy/update.sh` builds the web app with `WEB_BASE_URL=""` (served at the domain root) and installs it to `/opt/darwish-kitchen/web` on the server. `scripts/postexport-web.mjs` prefixes the PWA links and adds `404.html`. GitHub Actions (`.github/workflows/ci.yml`) only checks: typecheck, web build, server tests.
 
+## Icons
+
+The brand icon is `assets/brand/icon-source.png`. `python3 scripts/make-icons.py` (needs Pillow) regenerates everything from it: `assets/icon.png` (iOS/web), Android adaptive foreground/background/monochrome (cream panel inside the safe zone on the orange `#F0802B`, set in `app.json`), splash, favicon, PWA icons incl. maskable, and `assets/logo.png` (home header).
+
 ## Checks
 
 `npm run typecheck`, `npm run build:web`, and `npx expo export --platform android --platform ios` (bundles native JS without a device). `cd server && npm test` covers the API. For an end-to-end run, start the API locally (`PORT=3020 DATA_DIR=./data npm start`) and build/run the web app with `EXPO_PUBLIC_API_URL=http://localhost:3020`.
