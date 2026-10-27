@@ -27,6 +27,8 @@ const app = createApp({
     apiKey: process.env.ANTHROPIC_API_KEY || undefined,
     model: process.env.AI_MODEL || undefined,
     dailyLimit: Number(process.env.AI_DAILY_LIMIT) || undefined,
+    // Optional: also search Pexels for recipe photos (free key from pexels.com/api).
+    pexelsKey: process.env.PEXELS_API_KEY || undefined,
   },
   otp: {
     url: process.env.OTP_URL || undefined,

@@ -52,7 +52,7 @@ if [[ ! -f "$OTP_ENV" ]]; then
     echo "OTP_TOKEN=$(read_quran WHATSAPP_OTP_TOKEN)"
   } > "$OTP_ENV"
 fi
-grep -q '^ANTHROPIC_API_KEY=' "$OTP_ENV" || printf '\n# AI features (Claude): key from console.anthropic.com. Optional: AI_MODEL, AI_DAILY_LIMIT (AI uses per user per day, default 20)\nANTHROPIC_API_KEY=\n' >> "$OTP_ENV"
+grep -q '^ANTHROPIC_API_KEY=' "$OTP_ENV" || printf '\n# AI features (Claude): key from console.anthropic.com. Optional: AI_MODEL, AI_DAILY_LIMIT (AI uses per user per day, default 20), PEXELS_API_KEY (more recipe photos)\nANTHROPIC_API_KEY=\n' >> "$OTP_ENV"
 grep -q '^ADMIN_PHONES=' "$OTP_ENV" || printf '\n# Control-panel admins (phone numbers, comma-separated)\nADMIN_PHONES=\n' >> "$OTP_ENV"
 # deploy/update.sh can pass ADMIN_PHONES=01001234567,... to set the admins.
 if [[ -n "${ADMIN_PHONES:-}" ]]; then

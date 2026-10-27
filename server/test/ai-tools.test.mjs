@@ -28,8 +28,37 @@ const codes = new Map();
 const calls = [];
 let claude, pages, app, server, base, PAGES, token, otherToken, adminToken;
 
-// Fake photo site: photo pages with og:image, JPEG and PNG images.
+// Fake photo sources: the Wikimedia Commons and Openverse search APIs, and their JPEG images.
+const sourceCalls = [];
+const BIG_JPEG = Buffer.concat([JPEG, Buffer.alloc(9000, 1)]);
 function pageHandler(req, res) {
+  const url = new URL(req.url, 'http://x');
+  if (url.pathname === '/w/api.php') {
+    sourceCalls.push({ api: 'commons', search: url.searchParams.get('gsrsearch'), ua: req.headers['user-agent'] });
+    const page = (index, n, mime, license, artist) => ({
+      index,
+      title: `File:${n}`,
+      imageinfo: [{ thumburl: `${PAGES}/img/${n}.jpg`, descriptionurl: `${PAGES}/wiki/${n}`, mime, extmetadata: { LicenseShortName: { value: license }, Artist: { value: artist } } }],
+    });
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ query: { pages: [
+      page(2, 'p2', 'image/jpeg', 'CC BY-NC 2.0', 'X'), // not free for the app → skipped
+      page(1, 'p1', 'image/jpeg', 'CC BY-SA 4.0', '<a href="/wiki/User:Sara">Sara</a>'),
+      page(3, 'p3', 'image/png', 'CC0', 'Y'), // not a JPEG → skipped
+    ] } }));
+  }
+  if (url.pathname === '/v1/images/') {
+    sourceCalls.push({ api: 'openverse', q: url.searchParams.get('q'), license: url.searchParams.get('license') });
+    res.writeHead(200, { 'Content-Type': 'application/json' });
+    return res.end(JSON.stringify({ results: [
+      { url: `${PAGES}/img/p1.jpg`, foreign_landing_url: `${PAGES}/wiki/p1`, license: 'by-sa', license_version: '4.0', creator: 'Sara', source: 'wikimedia', filetype: 'jpg' }, // same photo → once
+      { url: `${PAGES}/img/p4.jpg`, foreign_landing_url: `${PAGES}/flickr/p4`, license: 'by', license_version: '2.0', creator: 'Ali', source: 'flickr', filetype: 'jpg' },
+    ] }));
+  }
+  if (/^\/img\/p\d\.jpg$/.test(url.pathname)) {
+    res.writeHead(200, { 'Content-Type': 'image/jpeg' });
+    return res.end(req.headers.accept === 'image/jpeg' ? BIG_JPEG : PNG);
+  }
   const page = /^\/photo\/(\d)$/.exec(req.url);
   if (page) {
     res.writeHead(200, { 'Content-Type': 'text/html' });
@@ -93,32 +122,7 @@ async function claudeHandler(req, res) {
   if (system.includes('You check photos for recipes')) {
     return json({ photos: [{ index: 1, shows_dish: true, score: 9, problem: '' }, { index: 2, shows_dish: true, score: 4, problem: 'ضلمة' }] });
   }
-  if (system.includes('free-to-use photos')) {
-    return reply(
-      [
-        { type: 'server_tool_use', id: 'srvtoolu_1', name: 'web_search', input: { query: 'koshari' } },
-        {
-          type: 'web_search_tool_result',
-          tool_use_id: 'srvtoolu_1',
-          content: [1, 2, 3].map((n) => ({ type: 'web_search_result', url: `${PAGES}/photo/${n}`, title: `Photo ${n}`, encrypted_content: 'x', page_age: null })),
-        },
-        {
-          type: 'tool_use',
-          id: 'toolu_1',
-          name: 'submit_photos',
-          input: {
-            photos: [
-              { page_url: `${PAGES}/photo/1`, image_url: null, author: 'Sara', license: null },
-              { page_url: `${PAGES}/photo/2`, image_url: null, author: null, license: null },
-              { page_url: `${PAGES}/photo/3`, image_url: null, author: null, license: null }, // PNG → skipped
-              { page_url: 'https://made-up.example.com/photo/9', image_url: null, author: null, license: null }, // never searched
-            ],
-          },
-        },
-      ],
-      'tool_use',
-    );
-  }
+  if (system.includes('image-search queries')) return json({ queries: ['koshari', 'egyptian rice lentils'] });
   json({});
 }
 
@@ -153,7 +157,7 @@ before(async () => {
     otp: { devCodes: true, onDevCode: (p, c) => codes.set(p, c) },
     ai: {
       apiKey: 'test-key', baseURL: urlOf(claude), dailyLimit: 5, allowPrivateFetch: true, waitMs: 150,
-      moderationDelayMs: 20, photoSites: { pages: ['127.0.0.1'], images: ['127.0.0.1'] }, photoRunLimit: 1,
+      moderationDelayMs: 20, photoApis: { commons: `${PAGES}/w/api.php`, openverse: `${PAGES}/v1/images/` }, photoRunLimit: 1,
     },
   });
   server = await listen(app);
@@ -284,7 +288,7 @@ test('feed moderation: hides clear problems, flags doubtful posts, lets fixed po
   assert.ok(posts.some((p) => p.id === good.id));
 });
 
-test('photo finder: free photo sites only, scored by the AI, reviewed or applied automatically', async () => {
+test('photo finder: free-license photo APIs, scored by the AI, reviewed or applied automatically', async () => {
   assert.equal((await call('/api/admin/ai/photos', { token })).status, 403);
   const start = await call('/api/admin/ai/photos/run', { token: adminToken, json: { mode: 'review' } });
   assert.equal(start.status, 202);
@@ -298,19 +302,22 @@ test('photo finder: free photo sites only, scored by the AI, reviewed or applied
   assert.equal(done.run.waiting, 1);
   assert.equal(done.items.length, 1);
   const [item] = done.items;
-  assert.equal(item.candidates.length, 1); // photo 2 scored too low, photo 3 is a PNG, the made-up page was never searched
+  assert.equal(item.candidates.length, 1); // the Flickr photo scored too low; NC and PNG files were never downloaded
   const [photo] = item.candidates;
-  assert.deepEqual([photo.score, photo.author, photo.pageUrl], [9, 'Sara', `${PAGES}/photo/1`]);
+  assert.deepEqual([photo.score, photo.author, photo.pageUrl, photo.source, photo.license], [9, 'Sara', `${PAGES}/wiki/p1`, 'Wikimedia Commons', 'CC BY-SA 4.0']);
   const file = await call(photo.image);
   assert.equal(file.headers.get('content-type'), 'image/jpeg');
 
-  // The photo search was limited to the photo sites.
-  const search = calls.find((c) => String(c.system).includes('free-to-use photos'));
-  assert.deepEqual(search.tools[0].allowed_domains, ['127.0.0.1']);
+  // English search words from Claude; both sources asked for free licenses only; the review saw 2 photos.
+  assert.equal(sourceCalls[0].search, 'koshari filetype:bitmap');
+  assert.match(sourceCalls[0].ua, /^DarwishKitchen\//);
+  assert.equal(sourceCalls.find((c) => c.api === 'openverse').license, 'by,by-sa,cc0,pdm');
+  const review = calls.findLast((c) => String(c.system).includes('You check photos for recipes'));
+  assert.equal(review.messages[0].content.filter((b) => b.type === 'image').length, 2);
 
   const approved = await (await call(`/api/admin/ai/photos/${photo.id}/approve`, { token: adminToken, json: {} })).json();
   assert.match(approved.recipe.image, /^\/api\/catalog\/images\//);
-  assert.deepEqual(approved.recipe.imageCredit, { source: '127.0.0.1', url: `${PAGES}/photo/1`, author: 'Sara', license: null });
+  assert.deepEqual(approved.recipe.imageCredit, { source: 'Wikimedia Commons', url: `${PAGES}/wiki/p1`, author: 'Sara', license: 'CC BY-SA 4.0' });
   const catalog = (await (await call('/api/catalog')).json()).recipes;
   assert.equal(catalog.find((r) => r.id === item.recipe.id).imageCredit.author, 'Sara');
   assert.equal((await (await call('/api/admin/ai/photos', { token: adminToken })).json()).items.length, 0);

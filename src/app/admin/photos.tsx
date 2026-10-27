@@ -13,7 +13,7 @@ import { CATEGORY_LABELS_ONE } from '../../types';
 
 /**
  * Control panel: the AI finds photos for Darwish recipes without one, from free photo sites only
- * (Unsplash, Pexels, Wikimedia Commons), and the admin reviews them — or lets the clearly good ones go up by themselves.
+ * (Wikimedia Commons, Openverse, Pexels), and the admin reviews them — or lets the clearly good ones go up by themselves.
  */
 export default function AiPhotosScreen() {
   const c = useTheme();
@@ -103,7 +103,7 @@ export default function AiPhotosScreen() {
     <ScrollView style={{ backgroundColor: c.background }} contentContainerStyle={styles.container}>
       <Stack.Screen options={{ title: 'صور بالذكاء الاصطناعي' }} />
       <Muted>
-        الذكاء الاصطناعي بيدوّر على صور للوصفات اللي من غير صورة في مواقع الصور المجانية بس (Unsplash و Pexels و Wikimedia Commons)، وبيبص على كل صورة ويقيّمها. اسم المصوّر والموقع بيظهروا تحت الصورة في التطبيق.
+        الذكاء الاصطناعي بيدوّر على صور للوصفات اللي من غير صورة في مكتبات الصور المجانية بس (Wikimedia Commons و Openverse، و Pexels لو ضفت مفتاحه)، وبيبص على كل صورة ويقيّمها. اسم المصوّر والموقع بيظهروا تحت الصورة في التطبيق.
       </Muted>
 
       {error ? <Text style={{ color: c.danger, fontWeight: '600' }}>مقدرناش نجيب البيانات. اتأكد من الإنترنت.</Text> : null}
@@ -135,6 +135,11 @@ export default function AiPhotosScreen() {
           {run && !run.running ? (
             <Muted style={{ fontSize: 13 }}>
               {`آخر مرة: ${run.applied} صورة اتحطت على طول • ${run.waiting} مستنية مراجعتك • ${run.notFound} ملقيناش ليها${run.failed ? ` • ${run.failed} حصل فيها مشكلة` : ''}`}
+            </Muted>
+          ) : null}
+          {run && !run.running && run.lastError ? (
+            <Muted style={{ fontSize: 12 }}>
+              {`سبب المشكلة: ${run.lastError}`}
             </Muted>
           ) : null}
         </Card>

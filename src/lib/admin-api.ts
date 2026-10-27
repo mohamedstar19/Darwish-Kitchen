@@ -65,6 +65,8 @@ export type PhotoRun = {
   waiting: number;
   notFound: number;
   failed: number;
+  /** Why the last failed recipe failed (for support). */
+  lastError?: string | null;
   current: string | null;
 };
 

@@ -187,7 +187,7 @@ const sleep = (ms) => new Promise((resolve) => setTimeout(resolve, ms).unref?.()
 
 export function createAi({
   db, dataDir, catalog, apiKey, baseURL, model, dailyLimit = 20, allowPrivateFetch = false, waitMs = 25_000,
-  moderationDelayMs, photoSites, photoRunLimit,
+  moderationDelayMs, photoApis, pexelsKey, photoRunLimit,
 }) {
   const claude = createClaude({ apiKey, baseURL, model });
   const client = claude.enabled;
@@ -209,7 +209,7 @@ export function createAi({
   const today = () => new Date().toISOString().slice(0, 10);
 
   const moderation = createModeration({ db, dataDir, claude, delayMs: moderationDelayMs });
-  const photos = createPhotoFinder({ db, dataDir, claude, catalog, sites: photoSites, allowPrivateFetch, runLimit: photoRunLimit });
+  const photos = createPhotoFinder({ db, dataDir, claude, catalog, apis: photoApis, pexelsKey, allowPrivateFetch, runLimit: photoRunLimit });
 
   // ---------- daily limit ----------
 

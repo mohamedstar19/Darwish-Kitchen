@@ -1,16 +1,18 @@
 import { randomBytes } from 'node:crypto';
 import { mkdir, readFile, rm, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
-import { downloadJpeg, hostIn, normalizeUrl, nullableString, pagePhoto, seenUrls } from './ai-core.mjs';
+import { downloadJpeg, normalizeUrl } from './ai-core.mjs';
 import { HttpError, readJson, send } from './http.mjs';
 
 /**
  * Control panel: the AI finds photos for Darwish recipes that have none.
  *
- * Photos come only from free-to-use photo sites (Unsplash, Pexels, Wikimedia Commons) — never from cooking
- * sites, whose photos are copyrighted. Claude searches those sites, the server downloads each photo page's
- * main image, then Claude looks at the photos and scores how well each one shows the dish. Every photo keeps
- * its credit (site, page, photographer, license), shown in the app under the photo.
+ * Photos come only from free-license sources, through their official search APIs (no page scraping,
+ * which photo sites block): Wikimedia Commons, Openverse (Creative Commons photos from Flickr and others)
+ * and Pexels when PEXELS_API_KEY is set. Never from cooking sites, whose photos are copyrighted.
+ * For each recipe: Claude turns the Arabic name into English search words, the server searches the
+ * sources and downloads up to 6 JPEGs, then Claude looks at the photos and scores how well each one
+ * shows the dish. Every photo keeps its credit (site, page, photographer, license), shown under the photo.
  *
  * Two modes per run:
  *   review → the best photos wait in the control panel; the admin picks one (or skips the recipe)
@@ -25,47 +27,25 @@ import { HttpError, readJson, send } from './http.mjs';
  *   GET    /api/ai/photo-candidates/:file            the waiting photos themselves (random names)
  */
 
-const SITES = {
-  pages: ['unsplash.com', 'pexels.com', 'commons.wikimedia.org'],
-  images: ['images.unsplash.com', 'images.pexels.com', 'upload.wikimedia.org'],
+const APIS = {
+  commons: 'https://commons.wikimedia.org/w/api.php',
+  openverse: 'https://api.openverse.org/v1/images/',
+  pexels: 'https://api.pexels.com/v1/search',
 };
-const SOURCE = { 'unsplash.com': 'Unsplash', 'pexels.com': 'Pexels', 'commons.wikimedia.org': 'Wikimedia Commons' };
-const LICENSE = { Unsplash: 'Unsplash License', Pexels: 'Pexels License' };
+// Wikimedia asks API clients to identify themselves.
+const USER_AGENT = 'DarwishKitchen/1.0 (https://kitchen.darwish-tech.com/about/)';
 const CANDIDATE_ID = /^ph-[a-f0-9]{16}$/;
-const MAX_CANDIDATES = 4;
+const MAX_DOWNLOADS = 6;
 const MIN_SCORE = 6;
 const AUTO_SCORE = 8;
 
-const SEARCH_SYSTEM = `You find free-to-use photos of dishes and drinks for Darwish Kitchen, an Egyptian Arabic recipe app.
+const QUERY_SYSTEM = `You help find photos of dishes and drinks for Darwish Kitchen, an Egyptian Arabic recipe app. Given a recipe, write up to 3 short English image-search queries for a photo of the finished dish: first its usual English or transliterated name (for example "koshari", "molokhia soup", "hibiscus tea"), then broader descriptions that would still show a similar-looking dish. Two to four words each, no quotes.`;
 
-Search only these free photo sites: Unsplash (unsplash.com/photos/... pages; skip "Unsplash+" premium photos), Pexels (pexels.com/photo/... pages) and Wikimedia Commons (commons.wikimedia.org/wiki/File:... pages). Search with the dish's English name and its Arabic name, and try a more general name if nothing fits (for example "lentil soup" for an Egyptian lentil soup).
-
-Pick up to 6 photo pages that most likely show the finished dish or drink itself, appetizing, without text or watermarks. Then call submit_photos once:
-- page_url: the exact address of a photo page you saw in the results. Never guess a URL.
-- image_url: the direct image address if you saw it, otherwise null.
-- author and license: the photographer and the license if the page shows them (on Wikimedia Commons, fetch the page with web_fetch to read them), otherwise null.
-If you find nothing suitable, call submit_photos with an empty list.`;
-
-const SUBMIT_TOOL = {
-  name: 'submit_photos',
-  description: 'Return the photo pages you found. Call it exactly once, at the end.',
-  strict: true,
-  input_schema: {
-    type: 'object',
-    additionalProperties: false,
-    required: ['photos'],
-    properties: {
-      photos: {
-        type: 'array',
-        items: {
-          type: 'object',
-          additionalProperties: false,
-          required: ['page_url', 'image_url', 'author', 'license'],
-          properties: { page_url: { type: 'string' }, image_url: nullableString, author: nullableString, license: nullableString },
-        },
-      },
-    },
-  },
+const QUERY_SCHEMA = {
+  type: 'object',
+  additionalProperties: false,
+  required: ['queries'],
+  properties: { queries: { type: 'array', items: { type: 'string' } } },
 };
 
 const REVIEW_SYSTEM = `You check photos for recipes in Darwish Kitchen, an Egyptian Arabic recipe app. For each numbered photo, decide whether it clearly shows the named dish or drink, ready to eat, and rate it from 0 to 10 as the recipe's main photo: 10 = this exact dish, appetizing, well lit, no text, logos or watermarks. Give 0 to photos that show pork, alcohol, people as the main subject, raw ingredients only, or a different dish. problem: a few words in Egyptian Arabic about what's wrong (empty if nothing).`;
@@ -89,24 +69,71 @@ const REVIEW_SCHEMA = {
 
 const CATEGORY_EN = { food: 'a dish', 'healthy-drink': 'a healthy drink or herbal tea', juice: 'a juice or smoothie' };
 
-/** Asks the photo sites for a good size, as JPEG. */
-function sized(raw) {
-  const url = new URL(raw);
-  if (url.hostname === 'images.unsplash.com') {
-    for (const k of ['w', 'h', 'crop', 'fit', 'fm', 'q', 'auto', 'dpr']) url.searchParams.delete(k);
-    url.searchParams.set('w', '1200');
-    url.searchParams.set('q', '80');
-    url.searchParams.set('fm', 'jpg');
-  } else if (url.hostname === 'images.pexels.com') {
-    for (const k of ['w', 'h', 'dpr', 'fit']) url.searchParams.delete(k);
-    url.searchParams.set('auto', 'compress');
-    url.searchParams.set('cs', 'tinysrgb');
-    url.searchParams.set('w', '1200');
-  }
-  return url.href;
+const plain = (html, max = 120) =>
+  typeof html === 'string'
+    ? html.replace(/<[^>]*>/g, ' ').replace(/&amp;/g, '&').replace(/&quot;/g, '"').replace(/&#0?39;/g, "'").replace(/&nbsp;/g, ' ').replace(/\s+/g, ' ').trim().slice(0, max) || null
+    : null;
+
+/** Licenses that allow use in the app with credit: public domain, CC0, CC BY, CC BY-SA (no NC/ND). */
+const freeLicense = (name) => !!name && /^(cc0|public domain|pdm|pd\b|cc[ -]by(-sa)?\b)/i.test(name) && !/\b(nc|nd)\b/i.test(name);
+
+async function getJson(url, headers = {}) {
+  const res = await fetch(url, { headers: { 'User-Agent': USER_AGENT, Accept: 'application/json', ...headers }, signal: AbortSignal.timeout(15_000) });
+  if (!res.ok) throw new Error(`${new URL(url).hostname} ${res.status}`);
+  return res.json();
 }
 
-export function createPhotoFinder({ db, dataDir, claude, catalog, sites = SITES, allowPrivateFetch = false, runLimit = 25 }) {
+// ---------- photo sources: each returns [{page, image, source, author, license}] ----------
+
+async function searchCommons(base, query) {
+  const url = new URL(base);
+  for (const [k, v] of Object.entries({
+    action: 'query', format: 'json', formatversion: '2', generator: 'search', gsrnamespace: '6', gsrlimit: '10',
+    gsrsearch: `${query} filetype:bitmap`, prop: 'imageinfo', iiprop: 'url|mime|extmetadata', iiurlwidth: '1200',
+  })) url.searchParams.set(k, v);
+  const data = await getJson(url);
+  return (data?.query?.pages ?? [])
+    .sort((a, b) => (a.index ?? 0) - (b.index ?? 0))
+    .map((p) => {
+      const info = p.imageinfo?.[0];
+      const meta = info?.extmetadata ?? {};
+      const license = plain(meta.LicenseShortName?.value, 60);
+      if (!info?.thumburl || info.mime !== 'image/jpeg' || !freeLicense(license)) return null;
+      return { page: info.descriptionurl, image: info.thumburl, source: 'Wikimedia Commons', author: plain(meta.Artist?.value), license };
+    })
+    .filter(Boolean);
+}
+
+const OPENVERSE_LICENSE = { by: 'CC BY', 'by-sa': 'CC BY-SA', cc0: 'CC0', pdm: 'Public domain' };
+const SOURCE_NAMES = { flickr: 'Flickr', wikimedia: 'Wikimedia Commons', stocksnap: 'StockSnap', rawpixel: 'rawpixel' };
+
+async function searchOpenverse(base, query) {
+  const url = new URL(base);
+  for (const [k, v] of Object.entries({ q: query, license: 'by,by-sa,cc0,pdm', page_size: '10', mature: 'false' })) url.searchParams.set(k, v);
+  const data = await getJson(url);
+  return (data?.results ?? [])
+    .filter((r) => r.url && r.foreign_landing_url && OPENVERSE_LICENSE[r.license] && (!r.filetype || /^jpe?g$/i.test(r.filetype)))
+    .map((r) => ({
+      page: r.foreign_landing_url,
+      image: r.url,
+      source: SOURCE_NAMES[r.source] ?? String(r.source ?? 'Openverse'),
+      author: plain(r.creator),
+      license: [OPENVERSE_LICENSE[r.license], ['by', 'by-sa'].includes(r.license) ? r.license_version : ''].filter(Boolean).join(' '),
+    }));
+}
+
+async function searchPexels(base, key, query) {
+  const url = new URL(base);
+  url.searchParams.set('query', query);
+  url.searchParams.set('per_page', '8');
+  const data = await getJson(url, { Authorization: key });
+  return (data?.photos ?? [])
+    .filter((p) => p.url && p.src?.large)
+    .map((p) => ({ page: p.url, image: p.src.large, source: 'Pexels', author: plain(p.photographer), license: 'Pexels License' }));
+}
+
+export function createPhotoFinder({ db, dataDir, claude, catalog, apis = {}, pexelsKey, allowPrivateFetch = false, runLimit = 25 }) {
+  const api = { ...APIS, ...apis };
   const dir = join(dataDir, 'ai-photos');
   db.exec(`
     CREATE TABLE IF NOT EXISTS ai_photo_candidates (
@@ -135,53 +162,55 @@ export function createPhotoFinder({ db, dataDir, claude, catalog, sites = SITES,
     setStatus: db.prepare('UPDATE ai_photo_candidates SET status = ? WHERE id = ?'),
   };
   const fileOf = (id) => join(dir, `${id}.jpg`);
-  const fetchOpts = (domains) => ({ allowPrivate: allowPrivateFetch, allowHost: (h) => hostIn(h, domains) });
-  const sourceOf = (host) => SOURCE[Object.keys(SOURCE).find((d) => hostIn(host, [d]))] ?? host.replace(/^www\./, '');
 
   let run = null; // progress of the current (or last) run
 
   /** Searches, downloads and scores photos for one recipe; saves the good ones as candidates. */
   async function findFor(recipe) {
-    const { input, contents } = await claude.withTools({
-      system: SEARCH_SYSTEM,
-      content: `Dish name (Arabic): ${recipe.title}\nKind: ${CATEGORY_EN[recipe.category] ?? 'a dish'}\nMain ingredients: ${recipe.ingredients.slice(0, 8).join('، ')}`,
-      submitName: 'submit_photos',
-      tools: [
-        { type: 'web_search_20260209', name: 'web_search', max_uses: 4, allowed_domains: sites.pages },
-        { type: 'web_fetch_20260209', name: 'web_fetch', max_uses: 6, allowed_domains: [...sites.pages, ...sites.images] },
-        SUBMIT_TOOL,
-      ],
+    const kind = CATEGORY_EN[recipe.category] ?? 'a dish';
+    const words = await claude.json({
+      system: QUERY_SYSTEM,
+      content: `Recipe name (Arabic): ${recipe.title}\nKind: ${kind}\nMain ingredients: ${recipe.ingredients.slice(0, 8).join('، ')}`,
+      schema: QUERY_SCHEMA,
     });
-    const seen = seenUrls(contents);
+    const queries = (Array.isArray(words?.queries) ? words.queries : []).filter((x) => typeof x === 'string' && x.trim()).map((x) => x.trim().slice(0, 60)).slice(0, 3);
     const used = new Set(q.usedPages.all(recipe.id).map((r) => normalizeUrl(r.page_url)));
+    const stats = { found: 0, downloaded: 0, errors: [] };
 
-    // Download the photos (only from the free photo sites, only pages the search really returned).
+    // Search the free sources and download JPEGs until there are enough to compare.
     const photos = [];
-    for (const p of Array.isArray(input?.photos) ? input.photos : []) {
-      if (photos.length >= MAX_CANDIDATES) break;
-      let page;
-      try {
-        page = new URL(String(p.page_url));
-      } catch {
-        continue;
+    const sources = [
+      (query) => searchCommons(api.commons, query),
+      (query) => searchOpenverse(api.openverse, query),
+      ...(pexelsKey ? [(query) => searchPexels(api.pexels, pexelsKey, query)] : []),
+    ];
+    for (const query of queries) {
+      for (const search of sources) {
+        if (photos.length >= MAX_DOWNLOADS) break;
+        let found = [];
+        try {
+          found = await search(query);
+        } catch (e) {
+          console.error(new Date().toISOString(), 'AI photos: search failed', query, e?.message);
+          stats.errors.push(e?.message ?? 'search failed');
+          continue;
+        }
+        stats.found += found.length;
+        for (const f of found) {
+          if (photos.length >= MAX_DOWNLOADS) break;
+          const key = normalizeUrl(f.page);
+          if (!key || used.has(key) || used.has(normalizeUrl(f.image))) continue;
+          used.add(key);
+          used.add(normalizeUrl(f.image));
+          const bytes = await downloadJpeg(f.image, { allowPrivate: allowPrivateFetch, userAgent: USER_AGENT });
+          if (!bytes || bytes.length < 8000) continue; // tiny files are icons or broken images
+          stats.downloaded++;
+          photos.push({ ...f, bytes });
+        }
       }
-      const key = normalizeUrl(page.href);
-      if (!hostIn(page.hostname, sites.pages) || !seen.has(key) || used.has(key)) continue;
-      used.add(key);
-      let imageUrl = await pagePhoto(page.href, fetchOpts(sites.pages));
-      if (!imageUrl && typeof p.image_url === 'string') imageUrl = p.image_url;
-      try {
-        if (!imageUrl || !hostIn(new URL(imageUrl).hostname, sites.images)) continue;
-        imageUrl = sized(imageUrl);
-      } catch {
-        continue;
-      }
-      const bytes = await downloadJpeg(imageUrl, fetchOpts(sites.images));
-      if (!bytes) continue;
-      const source = sourceOf(page.hostname);
-      const text = (v, n) => (typeof v === 'string' && v.trim() ? v.trim().slice(0, n) : null);
-      photos.push({ page: page.href, imageUrl, bytes, source, author: text(p.author, 120), license: text(p.license, 80) ?? LICENSE[source] ?? null });
     }
+    console.log(new Date().toISOString(), `AI photos: "${recipe.title}" — queries ${queries.join(' | ') || '-'}; found ${stats.found}, downloaded ${stats.downloaded}`);
+    if (!photos.length && !stats.found && stats.errors.length) throw new Error(`photo search failed: ${stats.errors[0]}`);
     if (!photos.length) return [];
 
     // Claude looks at the photos and scores them.
@@ -202,7 +231,7 @@ export function createPhotoFinder({ db, dataDir, claude, catalog, sites = SITES,
       p.saved = true;
       const id = `ph-${randomBytes(8).toString('hex')}`;
       await writeFile(fileOf(id), p.bytes, { mode: 0o644 });
-      q.insert.run(id, recipe.id, p.page, p.imageUrl, p.source, p.author, p.license, score, String(r.problem ?? '').slice(0, 200) || null, Date.now());
+      q.insert.run(id, recipe.id, p.page, p.image, p.source, p.author, p.license, score, String(r.problem ?? '').slice(0, 200) || null, Date.now());
       saved.push({ id, score });
     }
     return saved.sort((a, b) => b.score - a.score);
@@ -236,7 +265,7 @@ export function createPhotoFinder({ db, dataDir, claude, catalog, sites = SITES,
       .missingImages()
       .filter((r) => (ids ? ids.includes(r.id) : !waiting.has(r.id)))
       .slice(0, runLimit);
-    run = { mode, running: true, total: targets.length, done: 0, applied: 0, waiting: 0, notFound: 0, failed: 0, current: null, startedAt: Date.now(), finishedAt: null };
+    run = { mode, running: true, total: targets.length, done: 0, applied: 0, waiting: 0, notFound: 0, failed: 0, lastError: null, current: null, startedAt: Date.now(), finishedAt: null };
     const current = run;
     (async () => {
       for (const recipe of targets) {
@@ -250,6 +279,7 @@ export function createPhotoFinder({ db, dataDir, claude, catalog, sites = SITES,
           } else current.waiting++;
         } catch (e) {
           current.failed++;
+          current.lastError = String(e?.message ?? 'error').slice(0, 200);
           console.error(new Date().toISOString(), 'AI photo search failed', recipe.id, e?.status ?? '', e?.message);
         }
         current.done++;

@@ -58,7 +58,7 @@ export const hostIn = (host, domains) => domains.some((d) => host === d || host.
  * GET with redirects followed by hand, so every hop is checked (public address, and `allowHost` when given).
  * Returns the Response of the last hop, or null.
  */
-async function safeGet(raw, { allowPrivate = false, allowHost, accept, timeout = 8000 } = {}) {
+async function safeGet(raw, { allowPrivate = false, allowHost, accept, timeout = 8000, userAgent = 'Mozilla/5.0 (compatible; DarwishKitchen/1.0)' } = {}) {
   let url = new URL(raw);
   for (let hop = 0; hop < 4; hop++) {
     if (allowHost && !allowHost(url.hostname)) return null;
@@ -67,7 +67,7 @@ async function safeGet(raw, { allowPrivate = false, allowHost, accept, timeout =
     const res = await fetch(url, {
       redirect: 'manual',
       signal: AbortSignal.timeout(timeout),
-      headers: { 'User-Agent': 'Mozilla/5.0 (compatible; DarwishKitchen/1.0)', Accept: accept },
+      headers: { 'User-Agent': userAgent, Accept: accept },
     });
     if (res.status >= 300 && res.status < 400 && res.headers.get('location')) {
       res.body?.cancel().catch(() => {});
@@ -115,7 +115,8 @@ export const isWebp = (b) => b.length >= 12 && b.toString('latin1', 0, 4) === 'R
 /** Downloads a JPEG photo (up to `maxBytes`), or returns null. */
 export async function downloadJpeg(url, { maxBytes = 5 * 1024 * 1024, ...options } = {}) {
   try {
-    const res = await safeGet(url, { ...options, accept: 'image/jpeg,image/*', timeout: 15_000 });
+    // Ask for JPEG only: some image CDNs send WebP/AVIF when the client accepts them.
+    const res = await safeGet(url, { ...options, accept: 'image/jpeg', timeout: 15_000 });
     if (!res?.ok || Number(res.headers.get('content-length') ?? 0) > maxBytes) return null;
     const chunks = [];
     let size = 0;
