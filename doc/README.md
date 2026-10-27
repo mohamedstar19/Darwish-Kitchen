@@ -61,7 +61,7 @@
 - Auth: email + password (8+ chars, scrypt). Login returns a random bearer token stored hashed, valid 180 days. Login/signup are limited to 20 tries per IP per 15 minutes (IP from Cloudflare/nginx headers only when the request comes from localhost).
 - Every backup/image route is scoped to the token's user. Image names are validated, uploads must be JPEG (≤ 5 MB, ≤ 2000 per user); backup JSON ≤ 10 MB.
 - Deleting the account removes the user row (sessions and backup cascade) and the photo folder.
-- Production: PM2 process `kitchen` on 127.0.0.1:3020 behind nginx (`deploy/kitchen-nginx.conf`), nightly tarball of the data folder kept 14 days. See `deploy/README.md`.
+- Production: PM2 process `kitchen` (ecosystem file written by `install.sh`) on 127.0.0.1:3020, or the next free port if another program uses it (saved in `/opt/darwish-kitchen/port` and written into the nginx site), behind nginx (`deploy/kitchen-nginx.conf`), nightly tarball of the data folder kept 14 days. See `deploy/README.md`.
 
 ## Backup and restore (app)
 

@@ -7,7 +7,7 @@
 #
 # - Node.js 22 + nginx + PM2 if missing (the Quran server already has them)
 # - system user "kitchen", data in /opt/darwish-kitchen/data (never overwritten)
-# - backup API on 127.0.0.1:3020 via PM2 ("kitchen"), auto-start on reboot
+# - backup API on 127.0.0.1 (port 3020, or the next free one) via PM2 ("kitchen"), auto-start on reboot
 # - web app in /opt/darwish-kitchen/web
 # - nginx site for kitchen.darwish-tech.com
 # Safe to re-run.
@@ -50,9 +50,36 @@ chown -R root:root "$APP_HOME/web" && chmod -R a+rX "$APP_HOME/web"
 chmod 755 "$APP_HOME"
 
 log "5/6 PM2"
-sudo -u "$APP_USER" -H bash -lc "cd '$APP_HOME/server' && \
-  if pm2 describe kitchen >/dev/null 2>&1; then pm2 restart kitchen --update-env; \
-  else PORT=3020 HOST=127.0.0.1 DATA_DIR='$APP_HOME/data' pm2 start src/server.mjs --name kitchen --node-args='--disable-warning=ExperimentalWarning'; fi && pm2 save"
+# Stop our own process first so its port counts as free.
+sudo -u "$APP_USER" -H bash -lc "pm2 delete kitchen >/dev/null 2>&1 || true"
+sleep 1
+port_busy() {
+  ss -ltnH 2>/dev/null | awk '{print $4}' | grep -Eq "[:.]$1\$" && return 0
+  timeout 1 bash -c "echo > /dev/tcp/127.0.0.1/$1" 2>/dev/null
+}
+# Keep the port from the last deploy; move on if another program took it.
+PORT="$(cat "$APP_HOME/port" 2>/dev/null || echo 3020)"
+while port_busy "$PORT"; do
+  echo "   port $PORT is used by another program — trying $((PORT + 1))"
+  PORT=$((PORT + 1))
+  [[ $PORT -le 3099 ]] || { echo "no free port between 3020 and 3099" >&2; exit 1; }
+done
+echo "$PORT" > "$APP_HOME/port"
+echo "   API port: $PORT"
+
+cat > "$APP_HOME/server/ecosystem.config.cjs" <<ECOSYSTEM
+module.exports = {
+  apps: [{
+    name: 'kitchen',
+    script: 'src/server.mjs',
+    cwd: '$APP_HOME/server',
+    node_args: '--disable-warning=ExperimentalWarning',
+    env: { PORT: '$PORT', HOST: '127.0.0.1', DATA_DIR: '$APP_HOME/data' },
+  }],
+};
+ECOSYSTEM
+chown "$APP_USER:$APP_USER" "$APP_HOME/server/ecosystem.config.cjs" "$APP_HOME/port"
+sudo -u "$APP_USER" -H bash -lc "cd '$APP_HOME/server' && pm2 start ecosystem.config.cjs && pm2 save"
 env PATH="$PATH" pm2 startup systemd -u "$APP_USER" --hp "$APP_HOME" >/dev/null 2>&1 || true
 
 # Nightly copy of the database (keeps 14 days).
@@ -61,14 +88,18 @@ cat > /etc/cron.d/darwish-kitchen-backup <<CRON
 CRON
 
 log "6/6 nginx"
-cp "$BUNDLE/deploy/kitchen-nginx.conf" "$NGINX_SITE"
+sed "s/127\.0\.0\.1:3020/127.0.0.1:$PORT/" "$BUNDLE/deploy/kitchen-nginx.conf" > "$NGINX_SITE"
 ln -sf "$NGINX_SITE" /etc/nginx/sites-enabled/darwish-kitchen.conf
 nginx -t
 systemctl reload nginx 2>/dev/null || nginx -s reload 2>/dev/null || nginx
 
-sleep 1
-if curl -fsS http://127.0.0.1:3020/api/health >/dev/null; then
-  echo -e "\n\033[1;32m✅ Darwish Kitchen is running.\033[0m API: 127.0.0.1:3020 · web: $APP_HOME/web"
-else
-  echo -e "\n\033[1;31m⚠️  API did not answer. Check: sudo -u $APP_USER pm2 logs kitchen\033[0m"; exit 1
-fi
+# Make sure it's really Kitchen answering (not another program on the same port).
+for _ in 1 2 3 4 5; do
+  if curl -fsS "http://127.0.0.1:$PORT/api/health" 2>/dev/null | grep -q '"ok":true'; then
+    echo -e "\n\033[1;32m✅ Darwish Kitchen is running.\033[0m API: 127.0.0.1:$PORT · web: $APP_HOME/web"
+    exit 0
+  fi
+  sleep 1
+done
+echo -e "\n\033[1;31m⚠️  API did not answer. Check: sudo -u $APP_USER pm2 logs kitchen --lines 30\033[0m"
+exit 1

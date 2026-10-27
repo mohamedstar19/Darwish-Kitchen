@@ -5,7 +5,7 @@
 | الجزء | المكان على السيرفر |
 | --- | --- |
 | نسخة الويب (للآيفون وأي متصفح) | `/opt/darwish-kitchen/web` بيخدمها nginx |
-| سيرفر النسخ الاحتياطي (API) | `/opt/darwish-kitchen/server` على `127.0.0.1:3020` عن طريق PM2 باسم `kitchen` |
+| سيرفر النسخ الاحتياطي (API) | `/opt/darwish-kitchen/server` على `127.0.0.1:3020` (أو أول بورت فاضي بعده لو مشغول — محفوظ في `/opt/darwish-kitchen/port`) عن طريق PM2 باسم `kitchen` |
 | البيانات (الحسابات + النسخ + الصور) | `/opt/darwish-kitchen/data` (SQLite + مجلد صور) — **مش بيتمسح أبدًا مع التحديث** |
 | نسخة ليلية من البيانات | `/opt/darwish-kitchen/backups` (آخر 14 يوم، الساعة 3:15 الفجر) |
 
