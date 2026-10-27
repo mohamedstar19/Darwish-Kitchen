@@ -59,6 +59,8 @@ export default function RootLayout() {
               <Stack.Screen name="feed/[id]" options={{ title: 'وصفة شيف' }} />
               <Stack.Screen name="admin/index" options={{ title: 'لوحة التحكم' }} />
               <Stack.Screen name="admin/edit" options={{ title: 'وصفة الكتالوج' }} />
+              <Stack.Screen name="admin/photos" options={{ title: 'صور بالذكاء الاصطناعي' }} />
+              <Stack.Screen name="ai/fridge" options={{ title: 'عندي في التلاجة' }} />
             </Stack>
           </DataProviders>
           </DarwishProvider>

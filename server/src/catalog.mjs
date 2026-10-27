@@ -15,6 +15,8 @@ import { cleanRecipe } from './recipe.mjs';
  *          POST /api/admin/catalog          create
  *          PUT|DELETE /api/admin/catalog/:id
  *          PUT|DELETE /api/admin/catalog/:id/image   (JPEG body)
+ *
+ * Returns { route, missingImages, find, applyImage } — the AI photo finder (ai-photos.mjs) uses the last three.
  */
 
 const ID = /^[a-z0-9][a-z0-9-]{0,63}$/;
@@ -34,6 +36,10 @@ export function createCatalog({ db, dataDir, seedFile }) {
     );
     CREATE TABLE IF NOT EXISTS meta (key TEXT PRIMARY KEY, value TEXT NOT NULL);
   `);
+  // Who took a photo the AI found (JSON {source, url, author, license}); null for photos the admin uploaded.
+  if (!db.prepare('PRAGMA table_info(catalog)').all().some((c) => c.name === 'image_credit')) {
+    db.exec('ALTER TABLE catalog ADD COLUMN image_credit TEXT');
+  }
 
   const q = {
     all: db.prepare('SELECT * FROM catalog ORDER BY created_at DESC, id'),
@@ -41,7 +47,8 @@ export function createCatalog({ db, dataDir, seedFile }) {
     get: db.prepare('SELECT * FROM catalog WHERE id = ?'),
     insert: db.prepare('INSERT INTO catalog (id, data, image, published, created_at, updated_at) VALUES (?, ?, NULL, ?, ?, ?)'),
     update: db.prepare('UPDATE catalog SET data = ?, published = ?, updated_at = ? WHERE id = ?'),
-    setImage: db.prepare('UPDATE catalog SET image = ?, updated_at = ? WHERE id = ?'),
+    setImage: db.prepare('UPDATE catalog SET image = ?, image_credit = ?, updated_at = ? WHERE id = ?'),
+    missingImages: db.prepare('SELECT * FROM catalog WHERE image IS NULL ORDER BY published DESC, created_at DESC'),
     remove: db.prepare('DELETE FROM catalog WHERE id = ?'),
     meta: db.prepare('SELECT value FROM meta WHERE key = ?'),
     setMeta: db.prepare('INSERT INTO meta (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value'),
@@ -63,6 +70,7 @@ export function createCatalog({ db, dataDir, seedFile }) {
     id: row.id,
     ...JSON.parse(row.data),
     image: row.image ? `/api/catalog/images/${row.image}` : null,
+    imageCredit: row.image && row.image_credit ? JSON.parse(row.image_credit) : null,
     updatedAt: row.updated_at,
     ...(admin ? { published: row.published === 1, createdAt: row.created_at } : {}),
   });
@@ -75,8 +83,19 @@ export function createCatalog({ db, dataDir, seedFile }) {
 
   const deleteImageFile = (name) => (name ? rm(join(imagesDir, name), { force: true }) : Promise.resolve());
 
+  /** Stores a JPEG as the recipe's photo (replacing the old one). `credit` is set for photos found by the AI. */
+  async function applyImage(id, bytes, credit = null) {
+    const row = find(id);
+    const name = `${row.id}-${randomBytes(6).toString('hex')}.jpg`;
+    await mkdir(imagesDir, { recursive: true, mode: 0o755 });
+    await writeFile(join(imagesDir, name), bytes, { mode: 0o644 });
+    q.setImage.run(name, credit ? JSON.stringify(credit) : null, Date.now(), row.id);
+    await deleteImageFile(row.image);
+    return toJson(q.get.get(row.id), { admin: true });
+  }
+
   /** Handles catalog routes; returns false for other paths. `requireAdmin(req)` throws unless the caller is an admin. */
-  return async function route(req, res, path, requireAdmin) {
+  async function route(req, res, path, requireAdmin) {
     const m = req.method;
 
     if (path === '/api/catalog' && m === 'GET') {
@@ -128,16 +147,11 @@ export function createCatalog({ db, dataDir, seedFile }) {
         if (!String(req.headers['content-type'] ?? '').startsWith('image/jpeg')) throw new HttpError(415, 'jpeg-required');
         const bytes = await readBody(req, MAX_IMAGE);
         if (bytes.length < 4 || bytes[0] !== 0xff || bytes[1] !== 0xd8 || bytes[2] !== 0xff) throw new HttpError(400, 'not-jpeg');
-        const name = `${row.id}-${randomBytes(6).toString('hex')}.jpg`;
-        await mkdir(imagesDir, { recursive: true, mode: 0o755 });
-        await writeFile(join(imagesDir, name), bytes, { mode: 0o644 });
-        q.setImage.run(name, Date.now(), row.id);
-        await deleteImageFile(row.image);
-        send(res, 200, toJson(q.get.get(row.id), { admin: true }));
+        send(res, 200, await applyImage(row.id, bytes));
         return true;
       }
       if (m === 'DELETE') {
-        q.setImage.run(null, Date.now(), row.id);
+        q.setImage.run(null, null, Date.now(), row.id);
         await deleteImageFile(row.image);
         send(res, 200, toJson(q.get.get(row.id), { admin: true }));
         return true;
@@ -161,5 +175,12 @@ export function createCatalog({ db, dataDir, seedFile }) {
     }
 
     throw new HttpError(405, 'method-not-allowed');
+  }
+
+  return {
+    route,
+    applyImage,
+    find: (id) => toJson(find(id), { admin: true }),
+    missingImages: () => q.missingImages.all().map((r) => toJson(r, { admin: true })),
   };
 }

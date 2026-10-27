@@ -7,9 +7,10 @@ import { space, useTheme } from '../theme';
 import { RecipeListItem } from './RecipeListItem';
 import { Button, Chip, EmptyState, Muted } from './ui';
 
-type Filter = 'reported' | 'hidden' | 'all';
+type Filter = 'reported' | 'ai' | 'hidden' | 'all';
 const FILTERS: { key: Filter; label: string }[] = [
   { key: 'reported', label: '🚩 مبلّغ عنها' },
+  { key: 'ai', label: '✨ الذكاء الاصطناعي علّم عليها' },
   { key: 'hidden', label: '🙈 مخفية' },
   { key: 'all', label: 'الكل' },
 ];
@@ -99,6 +100,14 @@ export function ChefsModeration({ header }: { header: React.ReactNode }) {
               .join('  •  ')}
             onPress={() => router.push({ pathname: '/feed/[id]', params: { id: item.id } })}
           />
+          {item.aiStatus === 'review' || item.aiStatus === 'block' ? (
+            <View style={[styles.ai, { backgroundColor: item.aiStatus === 'block' ? c.dangerSoft : c.primarySoft }]}>
+              <Text style={{ color: c.text, fontWeight: '700', fontSize: 13 }}>
+                {item.aiStatus === 'block' ? '✨ الذكاء الاصطناعي خبّاها' : '✨ الذكاء الاصطناعي شاكك فيها'}
+              </Text>
+              {item.aiReason ? <Muted style={{ fontSize: 13 }}>{item.aiReason}</Muted> : null}
+            </View>
+          ) : null}
           <View style={styles.row}>
             <Button
               label={item.hidden ? 'إظهار' : 'إخفاء'}
@@ -121,4 +130,5 @@ const styles = StyleSheet.create({
   list: { padding: space.lg, gap: space.lg, paddingBottom: 40, maxWidth: 720, width: '100%', alignSelf: 'center' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
   row: { flexDirection: 'row', gap: space.sm },
+  ai: { borderRadius: 10, padding: space.sm, gap: 2 },
 });

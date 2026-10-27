@@ -22,7 +22,7 @@ const app = createApp({
   seedFile,
   // Control-panel admins, e.g. ADMIN_PHONES=01001234567,01112223334
   admins: (process.env.ADMIN_PHONES ?? '').split(/[\s,]+/).filter(Boolean),
-  // AI recipe search with Claude: needs ANTHROPIC_API_KEY (in the settings file).
+  // AI features (search, fridge, photo → recipe, smart suggestion, feed moderation, catalog photos): need ANTHROPIC_API_KEY.
   ai: {
     apiKey: process.env.ANTHROPIC_API_KEY || undefined,
     model: process.env.AI_MODEL || undefined,

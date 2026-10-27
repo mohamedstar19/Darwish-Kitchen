@@ -18,6 +18,11 @@
 | `src/app/(tabs)/recipes.tsx` | "وصفاتي": only the user's own + saved recipes; search, sections, filters |
 | `src/app/(tabs)/discover.tsx` | "من النت": AI search across many recipe sites (Arabic) + TheMealDB |
 | `src/lib/ai-search.ts`, `server/src/ai.mjs` | AI recipe search client / server (Claude + web search) |
+| `src/lib/ai-tools.ts` | AI helpers client: fridge ideas, photo → recipe, smart suggestion (job polling) |
+| `src/app/ai/fridge.tsx` | "عندي في التلاجة…": ingredients typed and/or photographed → dishes |
+| `src/app/admin/photos.tsx` | Control panel: photos found by the AI for Darwish recipes (review / auto) |
+| `server/src/ai-core.mjs` | Shared AI pieces: Claude client (JSON / web tools), safe fetch, halal filter, image input |
+| `server/src/ai-moderation.mjs`, `server/src/ai-photos.mjs` | AI feed moderation; AI photo finder for the catalog |
 | `src/app/recipe/[id].tsx` | Saved recipe details, favorite, edit, delete |
 | `src/app/recipe/edit.tsx` | Add / edit form with photo (`?id=` to edit) |
 | `src/app/online/[id].tsx` | Internet recipe details + save |
@@ -57,6 +62,7 @@
 - **وصفاتي** picks a random saved recipe tagged with that meal, skipping the last 5 suggestions when possible.
 - **من النت** picks a random TheMealDB category for the meal (`CATEGORIES_BY_MEAL`), then a random dish from it, and drops dishes containing pork or alcohol.
 - **الاتنين** chooses between the two at random and falls back to whichever one works (e.g. offline → saved recipes).
+- **✨ ذكي** (default once signed in): see "AI helpers" below. The answer shows the AI's reason under the title.
 
 ## Profile and activity
 
@@ -82,6 +88,27 @@
 - Results are stored (`ai_recipes`) so `GET /api/ai/recipes/:id` can reopen them; in the app they are `WebRecipe`s with `webId: "ai-…"` and an `ai` block (category, meal types, source), shown right-to-left, saved as `source: web`.
 - Settings in `/opt/darwish-kitchen/otp.env`: `ANTHROPIC_API_KEY` (required to turn it on), optional `AI_MODEL`, `AI_DAILY_LIMIT`. `/api/health` reports `ai`.
 - The server's only npm dependency is `@anthropic-ai/sdk` (installed by `install.sh` with `npm ci`).
+
+## AI helpers (fridge, photo → recipe, smart suggestion)
+
+All Claude calls are on the server (`claude-opus-5-5`, effort `low`, `fallbacks: "default"`, structured JSON output). Each call counts toward the user's `AI_DAILY_LIMIT` (shared with the search; admins unlimited); input is validated before anything is counted. They answer `200` with the result, or `202 {pending, job}` after ~25 s; the app then polls `GET /api/ai/jobs/:job` (owner only, kept 10 min).
+
+- `POST /api/ai/fridge {ingredients?, image?, category?}`: what the user has (text and/or a base64 photo, JPEG/PNG/WebP up to ~5 MB) → up to 4 halal dishes with `missing` ingredients and a tip (in `notes`). Results are stored like search results (`ai-…` ids, `generated: true`, no source) and open in `online/[id]`.
+- `POST /api/ai/photo-recipe {image}`: a photo of a handwritten/printed recipe or screenshot → the form fields (`recipe/edit.tsx` "عندك الوصفة مكتوبة؟"). `422 no-recipe` when the photo has none. The app sends the photo resized to ~1500 px (`pickPhotoForAi`), never stores it.
+- `POST /api/ai/suggest {meal, candidates, allowNew}`: the app sends the dishes that fit the meal (my food + Darwish food, max 60) with liked / rating / days since seen / suggested lately; the server adds Cairo day and time. Claude picks a candidate key (checked against the list) or writes a new dish, plus a short reason.
+
+## AI feed moderation
+
+- Every new or edited post (text, chef name, photo) is checked ~4 s after it changes (`posts.onChange` → `ai-moderation.mjs`, one at a time). Verdicts: `ok`; `review` (stays visible, flagged); `block` (hidden and flagged). Stored in `posts.ai_status / ai_reason / ai_hidden` (DB v5).
+- `ai_hidden` marks posts the AI hid: if the chef fixes the post and it passes, it comes back. Posts an admin hid stay hidden. The result is saved only if the post didn't change meanwhile.
+- Control panel → وصفات الشيفات → "✨ الذكاء الاصطناعي علّم عليها" (`GET /api/admin/posts?filter=ai`) shows the reason.
+
+## AI photos for Darwish recipes
+
+- Control panel → وصفات درويش → "✨ هات صور بالذكاء الاصطناعي" (`admin/photos.tsx`). A run takes up to 25 catalog recipes without a photo.
+- Only free photo sites: Claude searches (`allowed_domains`) Unsplash, Pexels and Wikimedia Commons photo pages; the server reads each page's `og:image` (or Claude's image URL) only from `images.unsplash.com`, `images.pexels.com`, `upload.wikimedia.org` (Unsplash+ is excluded), downloads JPEGs (≤5 MB, private addresses refused), then Claude scores each photo 0–10 for the dish. Photos scoring ≥6 are kept as candidates (`ai_photo_candidates`, files in `DATA_DIR/ai-photos`).
+- Modes: **review** (admin picks one or skips the recipe) and **auto** (a photo scoring ≥8 is applied at once; the rest wait). Applying copies it into `catalog-images` and stores `catalog.image_credit` `{source, url, author, license}`, returned as `imageCredit` and shown under the photo ("📷 author / site"). A manual upload clears the credit.
+- Admin API: `GET /api/admin/ai/photos`, `POST /api/admin/ai/photos/run {mode, ids?}`, `POST /api/admin/ai/photos/:id/approve`, `DELETE /api/admin/ai/photos/recipes/:recipeId`; candidate images at `GET /api/ai/photo-candidates/:id.jpg`.
 
 ## Chefs feed
 

@@ -87,7 +87,7 @@ export default function OnlineRecipeScreen() {
             <>
               {ai.category !== 'food' ? <Badge label={CATEGORY_LABELS_ONE[ai.category]} tone="accent" /> : null}
               {ai.category === 'food' ? ai.mealTypes.map((m) => <Badge key={m} label={MEAL_LABELS[m]} />) : null}
-              <Badge label={`من ${ai.sourceName}`} tone="muted" />
+              <Badge label={ai.generated ? '✨ كتبها الذكاء الاصطناعي' : `من ${ai.sourceName}`} tone="muted" />
             </>
           ) : (
             <>
@@ -102,10 +102,18 @@ export default function OnlineRecipeScreen() {
           {ai?.servings ? <Meta icon="people-outline" label={`${ai.servings} ${ai.category === 'food' ? 'أفراد' : 'كوباية'}`} /> : null}
         </View>
         <Muted>
-          {ai
-            ? `✨ الذكاء الاصطناعي لقى الوصفة دي على موقع ${ai.sourceName} وكتبها بالعربي. راجع المصدر الأصلي للتفاصيل.`
-            : 'الوصفة من موقع TheMealDB ومكتوبة بالإنجليزي. تقدر تحفظها وتعدّلها بالعربي.'}
+          {ai?.generated
+            ? '✨ الوصفة دي فكرة من الذكاء الاصطناعي في مطبخ درويش. ذوقها وعدّل المقادير على مزاجك.'
+            : ai
+              ? `✨ الذكاء الاصطناعي لقى الوصفة دي على موقع ${ai.sourceName} وكتبها بالعربي. راجع المصدر الأصلي للتفاصيل.`
+              : 'الوصفة من موقع TheMealDB ومكتوبة بالإنجليزي. تقدر تحفظها وتعدّلها بالعربي.'}
         </Muted>
+        {ai?.missing?.length ? (
+          <Card style={{ borderColor: c.primary }}>
+            <Text style={{ color: c.text, fontWeight: '800' }}>هتحتاج كمان</Text>
+            <Muted>{ai.missing.join('، ')}</Muted>
+          </Card>
+        ) : null}
       </View>
 
       {saved ? (

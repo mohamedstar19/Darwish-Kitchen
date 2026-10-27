@@ -26,14 +26,14 @@ function phoneFrom(body) {
  * Builds the request handler. `dataDir` holds the SQLite file and users' photos.
  * `otp` configures login codes (see otp.mjs): { url, token } for Darwish OTP, or { devCodes, onDevCode } for tests.
  * `admins`: phone numbers allowed into the control panel. `seedFile`: starter recipes for a new catalog.
- * `ai`: AI recipe search (see ai.mjs) — { apiKey, model, dailyLimit }; disabled without an API key.
+ * `ai`: AI features (see ai.mjs) — { apiKey, model, dailyLimit, … }; all off without an API key.
  */
 export function createApp({ dataDir, otp: otpConfig = {}, admins = [], seedFile, ai: aiConfig = {} }) {
   const db = openDb(dataDir);
   const adminPhones = new Set(admins.map((p) => normalizePhone(p)).filter(Boolean));
-  const catalogRoute = createCatalog({ db, dataDir, seedFile });
-  const posts = createPosts({ db, dataDir });
-  const ai = createAi({ db, ...aiConfig });
+  const catalog = createCatalog({ db, dataDir, seedFile });
+  const posts = createPosts({ db, dataDir, onChange: (id) => ai.postChanged(id) });
+  const ai = createAi({ db, dataDir, catalog, ...aiConfig });
   const imagesRoot = join(dataDir, 'images');
   const otp = createOtp(otpConfig);
   const sendPerIp = createRateLimiter({ limit: 10, windowMs: 15 * 60 * 1000 });
@@ -250,8 +250,8 @@ export function createApp({ dataDir, otp: otpConfig = {}, admins = [], seedFile,
     }
 
     if (await posts.route(req, res, path, { requireUser, optionalUser, isAdmin })) return;
-    if (await ai.route(req, res, path, { requireUser, isAdmin })) return;
-    if (await catalogRoute(req, res, path, requireAdmin)) return;
+    if (await ai.route(req, res, path, { requireUser, requireAdmin, isAdmin })) return;
+    if (await catalog.route(req, res, path, requireAdmin)) return;
 
     throw new HttpError(404, 'not-found');
   }

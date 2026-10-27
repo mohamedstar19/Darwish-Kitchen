@@ -40,3 +40,42 @@ export async function adminUploadImage(id: string, localUri: string) {
 
 export const adminDeleteImage = (id: string) =>
   api<CatalogRecipe>(`/api/admin/catalog/${encodeURIComponent(id)}/image`, { method: 'DELETE' });
+
+// ---------- AI photo finder ----------
+
+export type PhotoCandidate = {
+  id: string;
+  /** Server path of the photo. */
+  image: string;
+  source: string;
+  pageUrl: string;
+  author: string | null;
+  license: string | null;
+  /** 0–10: how well the AI thinks it shows the dish. */
+  score: number;
+  note: string | null;
+};
+
+export type PhotoRun = {
+  mode: 'review' | 'auto';
+  running: boolean;
+  total: number;
+  done: number;
+  applied: number;
+  waiting: number;
+  notFound: number;
+  failed: number;
+  current: string | null;
+};
+
+export type PhotoOverview = {
+  enabled: boolean;
+  run: PhotoRun | null;
+  missing: number;
+  items: { recipe: { id: string; title: string; category: RecipeCategory; image: string | null }; candidates: PhotoCandidate[] }[];
+};
+
+export const aiPhotos = () => api<PhotoOverview>('/api/admin/ai/photos');
+export const aiPhotosRun = (mode: 'review' | 'auto') => api<{ run: PhotoRun }>('/api/admin/ai/photos/run', { json: { mode } });
+export const aiPhotoApprove = (id: string) => api<{ recipe: CatalogRecipe }>(`/api/admin/ai/photos/${encodeURIComponent(id)}/approve`, { json: {} });
+export const aiPhotoSkip = (recipeId: string) => api(`/api/admin/ai/photos/recipes/${encodeURIComponent(recipeId)}`, { method: 'DELETE' });

@@ -13,6 +13,7 @@ const light = {
   accent: '#15803D',
   accentSoft: '#DCFCE7',
   danger: '#B91C1C',
+  dangerSoft: '#FEE2E2',
   overlay: 'rgba(0,0,0,0.35)',
 };
 
@@ -31,6 +32,7 @@ const dark: Theme = {
   accent: '#4ADE80',
   accentSoft: '#163020',
   danger: '#F87171',
+  dangerSoft: '#3B1717',
   overlay: 'rgba(0,0,0,0.55)',
 };
 

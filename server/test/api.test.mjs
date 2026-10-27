@@ -234,7 +234,7 @@ test('upgrades a database from the email-login version without losing data', asy
   upgraded.close();
   const db = new DatabaseSync(join(dir, 'kitchen.db'));
   try {
-    assert.equal(db.prepare('PRAGMA user_version').get().user_version, 4);
+    assert.equal(db.prepare('PRAGMA user_version').get().user_version, 5);
     const cols = db.prepare('PRAGMA table_info(users)').all().map((c) => c.name);
     assert.ok(cols.includes('phone'));
     assert.equal(db.prepare('SELECT email FROM users WHERE id = ?').get('u1').email, 'old@example.com');

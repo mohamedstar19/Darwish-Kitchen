@@ -3,7 +3,8 @@ import { router, Stack, useLocalSearchParams } from 'expo-router';
 import { useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native';
 import { Button, Chip, Muted, RecipeImage } from '../../components/ui';
-import { notify } from '../../lib/confirm';
+import { aiErrorMessage, aiPhotoRecipe, pickPhotoForAi } from '../../lib/ai-tools';
+import { confirm, notify } from '../../lib/confirm';
 import { goBack } from '../../lib/nav';
 import { pickRecipeImage, type ImageSource } from '../../lib/images';
 import { useAuth } from '../../lib/auth-context';
@@ -55,6 +56,7 @@ function RecipeForm({ id, initialCategory }: { id?: string; initialCategory: Rec
   const [steps, setSteps] = useState(existing?.steps.join('\n') ?? '');
   const [notes, setNotes] = useState(existing?.notes ?? '');
   const [busyImage, setBusyImage] = useState(false);
+  const [scanning, setScanning] = useState(false);
   const [saving, setSaving] = useState(false);
   const [errors, setErrors] = useState<string[]>([]);
 
@@ -74,6 +76,38 @@ function RecipeForm({ id, initialCategory }: { id?: string; initialCategory: Rec
       );
     } finally {
       setBusyImage(false);
+    }
+  };
+
+  /** Photo of a written recipe (notebook, card, screenshot) → the AI fills the form. */
+  const scan = async (source: ImageSource) => {
+    if (!auth) {
+      router.push('/account');
+      return;
+    }
+    if ((title.trim() || ingredients.trim() || steps.trim()) && !(await confirm('نكتب فوق اللي كتبته؟', 'الوصفة اللي في الصورة هتتكتب مكان الكلام اللي في الخانات.', 'أيوه، اكتبها'))) {
+      return;
+    }
+    setScanning(true);
+    try {
+      const photo = await pickPhotoForAi(source);
+      if (!photo) return;
+      const r = await aiPhotoRecipe(photo.base64);
+      setTitle(r.title);
+      setCategory(r.category ?? 'food');
+      setMealTypes(r.mealTypes);
+      setIngredients(r.ingredients.join('\n'));
+      setSteps(r.steps.join('\n'));
+      setMinutes(r.prepMinutes ? String(r.prepMinutes) : '');
+      setServings(r.servings ? String(r.servings) : '');
+      setNotes(r.notes ?? '');
+      setErrors([]);
+      notify('✨ الوصفة اتكتبت', r.mealTypes.length || r.category !== 'food' ? 'راجعها وعدّل اللي محتاج قبل ما تحفظ.' : 'راجعها، واختار الوجبة المناسبة قبل ما تحفظ.');
+    } catch (e) {
+      const msg = (e as Error).message;
+      notify('مقدرناش نقرا الوصفة', msg.endsWith('permission') ? 'محتاجين إذن الوصول للكاميرا أو الصور من إعدادات الموبايل.' : aiErrorMessage(e));
+    } finally {
+      setScanning(false);
     }
   };
 
@@ -155,6 +189,36 @@ function RecipeForm({ id, initialCategory }: { id?: string; initialCategory: Rec
         style={{ backgroundColor: c.background }}
         contentContainerStyle={styles.container}
         keyboardShouldPersistTaps="handled">
+        <View style={[styles.scanBox, { backgroundColor: c.primarySoft }]}>
+          <View style={styles.publishRow}>
+            <Ionicons name="sparkles" size={22} color={c.primary} />
+            <View style={{ flex: 1 }}>
+              <Text style={[styles.label, { color: c.text }]}>عندك الوصفة مكتوبة؟</Text>
+              <Muted style={{ fontSize: 12 }}>صوّر صفحة الكشكول أو الكارت أو سكرين شوت، والذكاء الاصطناعي يكتبهالك هنا.</Muted>
+            </View>
+          </View>
+          {scanning ? (
+            <View style={styles.publishRow}>
+              <ActivityIndicator color={c.primary} />
+              <Muted>بنقرا الوصفة… ممكن ياخد نص دقيقة.</Muted>
+            </View>
+          ) : (
+            <View style={styles.row}>
+              {Platform.OS !== 'web' ? (
+                <Button label="صوّر الوصفة" icon="camera-outline" variant="secondary" onPress={() => scan('camera')} style={{ flex: 1 }} />
+              ) : null}
+              <Button
+                label={Platform.OS === 'web' ? 'صوّر أو اختار صورة الوصفة' : 'من الصور'}
+                icon="document-text-outline"
+                variant="secondary"
+                onPress={() => scan('library')}
+                style={{ flex: 1 }}
+              />
+            </View>
+          )}
+          {!auth ? <Muted style={{ fontSize: 12 }}>محتاج تسجّل برقم موبايلك الأول.</Muted> : null}
+        </View>
+
         <View style={{ gap: space.sm }}>
           <Text style={[styles.label, { color: c.text }]}>الصورة</Text>
           <Pressable onPress={() => choose('library')} disabled={busyImage} accessibilityLabel="اختار صورة">
@@ -258,7 +322,7 @@ function RecipeForm({ id, initialCategory }: { id?: string; initialCategory: Rec
           </View>
         ) : null}
 
-        <Button label="حفظ الوصفة" icon="checkmark" onPress={save} loading={saving} disabled={busyImage} />
+        <Button label="حفظ الوصفة" icon="checkmark" onPress={save} loading={saving} disabled={busyImage || scanning} />
       </ScrollView>
     </KeyboardAvoidingView>
   );
@@ -271,6 +335,7 @@ const styles = StyleSheet.create({
   multiline: { minHeight: 120, textAlignVertical: 'top' },
   row: { flexDirection: 'row', gap: space.sm, alignItems: 'flex-start' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  scanBox: { borderRadius: radius.md, padding: space.md, gap: space.md },
   publishBox: { borderRadius: radius.md, padding: space.md, gap: space.md },
   publishRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   imageHint: { position: 'absolute', bottom: 14, start: 0, end: 0, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 },

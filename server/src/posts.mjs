@@ -18,7 +18,9 @@ import { cleanRecipe } from './recipe.mjs';
  *   PUT|DELETE /api/posts/:id/image   DELETE /api/posts/:id   (owner; admin may delete)
  *   POST|DELETE /api/posts/:id/like   POST /api/posts/:id/report {reason}
  * Admin:
- *   GET  /api/admin/posts?filter=reported|hidden|all   PUT /api/admin/posts/:id {hidden}
+ *   GET  /api/admin/posts?filter=reported|ai|hidden|all   PUT /api/admin/posts/:id {hidden}
+ *
+ * `onChange(postId)` runs after a post's text or photo changes (the AI moderation check).
  */
 
 const POST_ID = /^p-[a-f0-9]{12}$/;
@@ -29,7 +31,7 @@ const CATEGORIES = new Set(['food', 'healthy-drink', 'juice']);
 
 const isJpeg = (b) => b.length >= 4 && b[0] === 0xff && b[1] === 0xd8 && b[2] === 0xff;
 
-export function createPosts({ db, dataDir }) {
+export function createPosts({ db, dataDir, onChange = () => {} }) {
   const postImages = join(dataDir, 'post-images');
   const avatars = join(dataDir, 'avatars');
   const publishLimit = createRateLimiter({ limit: 30, windowMs: 24 * 60 * 60 * 1000 });
@@ -45,12 +47,12 @@ export function createPosts({ db, dataDir }) {
   const q = {
     feed: db.prepare(`${SELECT} WHERE p.hidden = 0 AND p.created_at < :before AND (:category = '' OR json_extract(p.data, '$.category') = :category) ORDER BY p.created_at DESC LIMIT :limit`),
     one: db.prepare(`${SELECT} WHERE p.id = :id`),
-    admin: db.prepare(`${SELECT} WHERE (:filter = 'all') OR (:filter = 'hidden' AND p.hidden = 1) OR (:filter = 'reported' AND EXISTS (SELECT 1 FROM post_reports r WHERE r.post_id = p.id)) ORDER BY reports DESC, p.created_at DESC LIMIT 200`),
+    admin: db.prepare(`${SELECT} WHERE (:filter = 'all') OR (:filter = 'hidden' AND p.hidden = 1) OR (:filter = 'reported' AND EXISTS (SELECT 1 FROM post_reports r WHERE r.post_id = p.id)) OR (:filter = 'ai' AND p.ai_status IN ('review', 'block')) ORDER BY reports DESC, p.created_at DESC LIMIT 200`),
     byClient: db.prepare('SELECT * FROM posts WHERE user_id = ? AND client_id = ?'),
     insert: db.prepare('INSERT INTO posts (id, user_id, client_id, data, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?)'),
     update: db.prepare('UPDATE posts SET data = ?, updated_at = ? WHERE id = ?'),
     setImage: db.prepare('UPDATE posts SET image = ?, updated_at = ? WHERE id = ?'),
-    setHidden: db.prepare('UPDATE posts SET hidden = ?, updated_at = ? WHERE id = ?'),
+    setHidden: db.prepare('UPDATE posts SET hidden = ?, ai_hidden = 0, updated_at = ? WHERE id = ?'),
     remove: db.prepare('DELETE FROM posts WHERE id = ?'),
     like: db.prepare('INSERT OR IGNORE INTO post_likes (post_id, user_id, created_at) VALUES (?, ?, ?)'),
     unlike: db.prepare('DELETE FROM post_likes WHERE post_id = ? AND user_id = ?'),
@@ -73,7 +75,7 @@ export function createPosts({ db, dataDir }) {
     hidden: row.hidden === 1,
     createdAt: row.created_at,
     updatedAt: row.updated_at,
-    ...(admin ? { reports: row.reports } : {}),
+    ...(admin ? { reports: row.reports, aiStatus: row.ai_status ?? null, aiReason: row.ai_reason ?? null } : {}),
   });
 
   const getPost = (id, me) => {
@@ -172,12 +174,14 @@ export function createPosts({ db, dataDir }) {
       const existing = q.byClient.get(me.userId, clientId);
       if (existing) {
         q.update.run(recipe, now, existing.id);
+        if (recipe !== existing.data) onChange(existing.id);
         send(res, 200, toJson(getPost(existing.id, me), me));
         return true;
       }
       if (!publishLimit(me.userId)) throw new HttpError(429, 'too-many-posts');
       const id = `p-${randomBytes(6).toString('hex')}`;
       q.insert.run(id, me.userId, clientId, recipe, now, now);
+      onChange(id);
       send(res, 201, toJson(getPost(id, me), me));
       return true;
     }
@@ -194,6 +198,7 @@ export function createPosts({ db, dataDir }) {
         const name = m === 'PUT' ? await saveJpeg(postImages, row.id, req) : null;
         q.setImage.run(name, Date.now(), row.id);
         await removeFile(postImages, row.image);
+        onChange(row.id);
         send(res, 200, toJson(getPost(row.id, me), me));
         return true;
       }
@@ -228,7 +233,7 @@ export function createPosts({ db, dataDir }) {
       const me = requireUser(req);
       if (!isAdmin(me)) throw new HttpError(403, 'not-admin');
       const filter = new URL(req.url ?? '/', 'http://x').searchParams.get('filter');
-      const rows = q.admin.all({ me: me.userId, filter: ['reported', 'hidden'].includes(filter) ? filter : 'all' });
+      const rows = q.admin.all({ me: me.userId, filter: ['reported', 'ai', 'hidden'].includes(filter) ? filter : 'all' });
       send(res, 200, { posts: rows.map((r) => toJson(r, me, { admin: true })) });
       return true;
     }

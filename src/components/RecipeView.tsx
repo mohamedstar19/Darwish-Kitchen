@@ -1,13 +1,14 @@
 import type { ReactNode } from 'react';
-import { ScrollView, StyleSheet, Text, View } from 'react-native';
+import { Linking, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { space, useTheme } from '../theme';
-import { CATEGORY_ICONS, CATEGORY_LABELS_ONE, MEAL_LABELS, type MealType, type RecipeCategory } from '../types';
+import { CATEGORY_ICONS, CATEGORY_LABELS_ONE, MEAL_LABELS, type ImageCredit, type MealType, type RecipeCategory } from '../types';
 import { RecipeBody } from './RecipeBody';
 import { Badge, Meta, RecipeImage } from './ui';
 
 type Props = {
   title: string;
   image?: string;
+  imageCredit?: ImageCredit;
   category: RecipeCategory;
   mealTypes: MealType[];
   prepMinutes?: number | null;
@@ -31,7 +32,17 @@ export function RecipeView(p: Props) {
   return (
     <ScrollView style={{ backgroundColor: c.background }} contentContainerStyle={styles.container}>
       {p.top}
-      <RecipeImage uri={p.image} height={260} icon={CATEGORY_ICONS[p.category]} />
+      <View style={{ gap: 4 }}>
+        <RecipeImage uri={p.image} height={260} icon={CATEGORY_ICONS[p.category]} />
+        {p.image && p.imageCredit ? (
+          <Text
+            accessibilityRole="link"
+            onPress={() => Linking.openURL(p.imageCredit!.url)}
+            style={[styles.credit, { color: c.muted }]}>
+            {`📷 ${[p.imageCredit.author, p.imageCredit.source].filter(Boolean).join(' / ')}${p.imageCredit.license ? ` (${p.imageCredit.license})` : ''}`}
+          </Text>
+        ) : null}
+      </View>
       <View style={{ gap: space.sm }}>
         <Text style={[styles.title, { color: c.text }]}>{p.title}</Text>
         <View style={styles.row}>
@@ -56,5 +67,6 @@ export function RecipeView(p: Props) {
 const styles = StyleSheet.create({
   container: { padding: space.lg, gap: space.xl, paddingBottom: 48, maxWidth: 720, width: '100%', alignSelf: 'center' },
   title: { fontSize: 26, fontWeight: '900' },
+  credit: { fontSize: 11, textDecorationLine: 'underline', alignSelf: 'flex-start' },
   row: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm, alignItems: 'center' },
 });

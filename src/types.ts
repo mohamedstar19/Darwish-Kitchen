@@ -60,11 +60,16 @@ export type Recipe = {
   customized?: boolean;
   /** Legacy: catalog version applied to a starter. */
   catalogVersion?: number;
+  /** Darwish recipes: credit for a photo the AI found. */
+  imageCredit?: ImageCredit;
   createdAt: number;
   updatedAt: number;
 };
 
 export type RecipeInput = Omit<Recipe, 'id' | 'createdAt' | 'updatedAt'>;
+
+/** Who took a photo the AI found on a free photo site (Unsplash, Pexels, Wikimedia Commons). */
+export type ImageCredit = { source: string; url: string; author?: string | null; license?: string | null };
 
 export const categoryOf = (r: Pick<Recipe, 'category'>): RecipeCategory => r.category ?? 'food';
 
@@ -89,6 +94,10 @@ export type WebRecipe = {
     prepMinutes?: number | null;
     servings?: number | null;
     notes?: string | null;
+    /** Written by the AI itself (fridge ideas, smart suggestions), not taken from a website. */
+    generated?: boolean;
+    /** Fridge ideas: important ingredients the user didn't mention. */
+    missing?: string[];
   };
 };
 

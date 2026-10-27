@@ -1,8 +1,8 @@
 import type { MealType, RecipeCategory, WebRecipe } from '../types';
 import { api } from './api';
 
-/** A recipe the AI search found on a cooking site (written in Arabic, with its source). */
-type AiRecipe = {
+/** A recipe the AI found on a cooking site (written in Arabic, with its source), or wrote itself (`generated`). */
+export type AiRecipe = {
   id: string;
   title: string;
   category: RecipeCategory;
@@ -14,20 +14,31 @@ type AiRecipe = {
   notes: string | null;
   image: string | null;
   sourceName: string;
-  sourceUrl: string;
+  sourceUrl: string | null;
+  generated?: boolean;
+  missing?: string[];
 };
 
 export const isAiId = (id: string) => id.startsWith('ai-');
 
-function toWebRecipe(r: AiRecipe): WebRecipe {
+export function toWebRecipe(r: AiRecipe): WebRecipe {
   return {
     webId: r.id,
     title: r.title,
     image: r.image ?? undefined,
     ingredients: r.ingredients,
     steps: r.steps,
-    sourceUrl: r.sourceUrl,
-    ai: { category: r.category, mealTypes: r.mealTypes, sourceName: r.sourceName, prepMinutes: r.prepMinutes, servings: r.servings, notes: r.notes },
+    sourceUrl: r.sourceUrl ?? undefined,
+    ai: {
+      category: r.category,
+      mealTypes: r.mealTypes,
+      sourceName: r.sourceName,
+      prepMinutes: r.prepMinutes,
+      servings: r.servings,
+      notes: r.notes,
+      generated: r.generated,
+      missing: r.missing,
+    },
   };
 }
 

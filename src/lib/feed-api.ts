@@ -25,6 +25,9 @@ export type FeedPost = {
   updatedAt: number;
   /** Control panel only. */
   reports?: number;
+  /** Control panel only: the AI check — null (not checked yet), ok, review (doubtful) or block (hidden by the AI). */
+  aiStatus?: 'ok' | 'review' | 'block' | null;
+  aiReason?: string | null;
 };
 
 export async function fetchFeed({ category, before }: { category?: RecipeCategory; before?: number } = {}) {
@@ -44,7 +47,7 @@ export const reportPost = (id: string, reason?: string) => api(`/api/posts/${enc
 
 export const deletePost = (id: string) => api(`/api/posts/${encodeURIComponent(id)}`, { method: 'DELETE' });
 
-export const adminPosts = async (filter: 'all' | 'reported' | 'hidden') =>
+export const adminPosts = async (filter: 'all' | 'reported' | 'ai' | 'hidden') =>
   (await api<{ posts: FeedPost[] }>(`/api/admin/posts?filter=${filter}`)).posts;
 
 export const adminHidePost = (id: string, hidden: boolean) =>

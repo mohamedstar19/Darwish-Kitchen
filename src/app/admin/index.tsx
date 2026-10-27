@@ -103,6 +103,11 @@ export default function AdminScreen() {
                 <Chip key={f.key} label={f.label} selected={filter === f.key} onPress={() => setFilter(f.key)} />
               ))}
             </View>
+            {noPhoto ? (
+              <Button label={`✨ هات صور بالذكاء الاصطناعي (${noPhoto})`} icon="images-outline" variant="secondary" onPress={() => router.push('/admin/photos')} />
+            ) : (
+              <Button label="✨ صور بالذكاء الاصطناعي" icon="images-outline" variant="ghost" onPress={() => router.push('/admin/photos')} />
+            )}
             {error ? <Text style={{ color: c.danger, fontWeight: '600' }}>مقدرناش نجيب الوصفات. اتأكد من الإنترنت.</Text> : null}
             {!recipes && !error ? <ActivityIndicator color={c.primary} /> : null}
           </View>

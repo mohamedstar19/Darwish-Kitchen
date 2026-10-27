@@ -119,5 +119,18 @@ function migrate(db) {
     version = 4;
   }
 
+  if (version < 5) {
+    // AI moderation of feed posts: ai_status null (not checked yet) | ok | review | block.
+    // ai_hidden = 1 when the AI (not an admin) hid the post, so a fixed post can come back by itself.
+    db.exec(`
+      BEGIN;
+      ALTER TABLE posts ADD COLUMN ai_status TEXT;
+      ALTER TABLE posts ADD COLUMN ai_reason TEXT;
+      ALTER TABLE posts ADD COLUMN ai_hidden INTEGER NOT NULL DEFAULT 0;
+      COMMIT;
+    `);
+    version = 5;
+  }
+
   db.exec(`PRAGMA user_version = ${version}`);
 }
