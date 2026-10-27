@@ -154,6 +154,12 @@ All Claude calls are on the server (`claude-opus-5-5`, effort `low`, `fallbacks:
 - Web sets `dir="rtl"` on `<html>`. Use `start`/`end` and `marginStart`/`marginEnd`, and leave `textAlign` unset so text follows the layout direction.
 - Internet recipes are English; their lists render left-to-right (`RecipeBody ltr`).
 
+## Product page (`/about`)
+
+- `site/page.html` + `site/img/` is the Arabic product page at `https://kitchen.darwish-tech.com/about/` (served by nginx from `web/about/`).
+- `page.html` keeps head content (title, fonts, styles) before `<!-- /head -->` and the page after it; `scripts/postexport-web.mjs` wraps it into `dist/about/index.html` with `lang="ar" dir="rtl"`, Open Graph tags and the icons. The same file can be published as a standalone preview.
+- Screenshots are 780×1328 WebP taken from the web build (iPhone 13 size); `img/og.jpg` (1200×630) is the link preview for WhatsApp/Facebook. Retake them when the screens change.
+
 ## Web deploy
 
 `deploy/update.sh` builds the web app with `WEB_BASE_URL=""` (served at the domain root) and installs it to `/opt/darwish-kitchen/web` on the server. `scripts/postexport-web.mjs` prefixes the PWA links, adds `?v=<content hash>` to the icon/manifest/favicon links and to the icons inside `manifest.json` (so icon changes bypass browser and Cloudflare caches), and adds `404.html`. The manifest has a fixed `"id": "/"` so installed apps keep their identity when the manifest URL changes. GitHub Actions (`.github/workflows/ci.yml`) only checks: typecheck, web build, server tests.

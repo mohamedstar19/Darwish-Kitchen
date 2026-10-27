@@ -1,0 +1,321 @@
+<title>Darwish Kitchen</title>
+<meta name="claude:viewport-fit-sides" content="cover">
+<meta name="description" content="Darwish Kitchen: تطبيق وصفات بالعربي بيقولك تطبخ إيه النهارده، ويقترح أكلات من اللي في تلاجتك، ويجيبلك وصفات من مواقع طبخ كتير بالذكاء الاصطناعي.">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Lalezar&family=IBM+Plex+Sans+Arabic:wght@400;500;700&display=swap">
+<style>
+/* Layout: one long kitchen-table scroll — a giant question as the hero, then each answer the app gives,
+   screen beside words, alternating sides; the meal clock is the page's signature strip. */
+:root {
+  --bg: #FFF8F1;          /* the app's cream */
+  --surface: #FFFFFF;
+  --surface-2: #FCEFE3;
+  --ink: #2B1D14;
+  --muted: #7C6A5C;
+  --line: #F0E2D3;
+  --primary: #C2410C;     /* the app's terracotta */
+  --primary-ink: #FFFFFF;
+  --primary-soft: #FDE7D7;
+  --leaf: #15803D;        /* drinks / healthy */
+  --leaf-soft: #DCFCE7;
+  --shadow: 0 18px 50px -24px rgba(91, 40, 9, 0.35);
+  --display: "Lalezar", "IBM Plex Sans Arabic", "Segoe UI", Tahoma, sans-serif;
+  --body: "IBM Plex Sans Arabic", "Segoe UI", Tahoma, "Noto Sans Arabic", sans-serif;
+  --radius: 22px;
+}
+@media (prefers-color-scheme: dark) {
+  :root:not([data-theme="light"]) {
+    --bg: #17120E; --surface: #231B15; --surface-2: #2E231B; --ink: #F7EDE4; --muted: #B9A797; --line: #3A2D23;
+    --primary: #F97316; --primary-ink: #1B0F06; --primary-soft: #3D2414; --leaf: #4ADE80; --leaf-soft: #163020;
+    --shadow: 0 18px 50px -24px rgba(0, 0, 0, 0.8); color-scheme: dark;
+  }
+}
+:root[data-theme="dark"] {
+  --bg: #17120E; --surface: #231B15; --surface-2: #2E231B; --ink: #F7EDE4; --muted: #B9A797; --line: #3A2D23;
+  --primary: #F97316; --primary-ink: #1B0F06; --primary-soft: #3D2414; --leaf: #4ADE80; --leaf-soft: #163020;
+  --shadow: 0 18px 50px -24px rgba(0, 0, 0, 0.8); color-scheme: dark;
+}
+
+body { background: var(--bg); color: var(--ink); font-family: var(--body); font-size: 17px; line-height: 1.75; }
+.page { direction: rtl; }
+.wrap { max-width: 1080px; margin-inline: auto; padding-left: max(16px, env(safe-area-inset-left, 0px)); padding-right: max(16px, env(safe-area-inset-right, 0px)); }
+h1, h2, h3 { font-family: var(--display); font-weight: 400; line-height: 1.25; text-wrap: balance; margin: 0; }
+p { margin: 0; }
+a { color: inherit; }
+a:focus-visible, button:focus-visible { outline: 3px solid var(--primary); outline-offset: 3px; border-radius: 12px; }
+
+/* top bar */
+.bar { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding-block: 18px; }
+.brand { display: flex; align-items: center; gap: 10px; text-decoration: none; }
+.brand img { width: 44px; height: 44px; border-radius: 12px; }
+.brand span { font-family: var(--display); font-size: 1.35rem; direction: ltr; }
+.btn { display: inline-flex; align-items: center; justify-content: center; gap: 8px; min-height: 48px; padding: 0 22px; border-radius: 999px; font-weight: 700; font-size: 1rem; text-decoration: none; border: 0; cursor: pointer; transition: transform .15s ease, background-color .15s ease; }
+.btn:hover { transform: translateY(-1px); }
+.btn-primary { background: var(--primary); color: var(--primary-ink); }
+.btn-soft { background: var(--primary-soft); color: var(--primary); }
+.btn-small { min-height: 40px; padding: 0 16px; font-size: .95rem; }
+
+/* hero */
+.hero { display: grid; grid-template-columns: minmax(0, 1.15fr) minmax(0, .85fr); gap: 40px; align-items: center; padding-block: 24px 56px; }
+.hero-copy { display: grid; gap: 22px; min-width: 0; }
+.eyebrow { font-weight: 700; color: var(--primary); letter-spacing: .01em; }
+.hero h1 { font-size: clamp(3rem, 9vw, 6.2rem); line-height: 1.1; }
+.answer { display: flex; flex-wrap: wrap; align-items: baseline; gap: 10px 14px; font-size: 1.25rem; }
+.dish { display: inline-block; font-family: var(--display); font-size: 1.7rem; color: var(--primary); background: var(--primary-soft); padding: 2px 18px; border-radius: 14px; transition: opacity .25s ease, transform .25s ease; }
+.dish.out { opacity: 0; transform: translateY(6px); }
+.lead { color: var(--muted); font-size: 1.12rem; max-width: 34em; }
+.actions { display: flex; flex-wrap: wrap; gap: 12px; }
+
+/* phone frames */
+.phone { position: relative; width: 100%; max-width: 300px; margin-inline: auto; aspect-ratio: 780 / 1328; border-radius: 38px; padding: 10px; background: var(--ink); box-shadow: var(--shadow); }
+.phone img { display: block; width: 100%; height: 100%; object-fit: cover; border-radius: 29px; background: var(--surface-2); }
+.phone .only-dark { display: none; }
+@media (prefers-color-scheme: dark) { :root:not([data-theme="light"]) .phone .only-dark { display: block; } :root:not([data-theme="light"]) .phone .only-light { display: none; } }
+:root[data-theme="dark"] .phone .only-dark { display: block; }
+:root[data-theme="dark"] .phone .only-light { display: none; }
+.hero .phone { transform: rotate(-3deg); }
+
+/* meal clock: the app picks the meal from the time */
+.clock { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); border: 1px solid var(--line); border-radius: var(--radius); overflow: hidden; background: var(--surface); }
+.clock div { padding: 18px 20px; display: grid; gap: 2px; min-width: 0; }
+.clock div + div { border-inline-start: 1px solid var(--line); }
+.clock b { font-family: var(--display); font-weight: 400; font-size: 1.6rem; color: var(--primary); }
+.clock span { color: var(--muted); font-size: .95rem; font-variant-numeric: tabular-nums; }
+.clock-note { color: var(--muted); font-size: .95rem; }
+
+/* feature rows */
+section { padding-block: 56px; }
+.row { display: grid; grid-template-columns: minmax(0, 1fr) minmax(0, 1fr); gap: 48px; align-items: center; }
+.row.flip .row-media { order: -1; }
+.row-copy { display: grid; gap: 18px; min-width: 0; }
+.row-copy h2 { font-size: clamp(2rem, 5vw, 3rem); }
+.tag { justify-self: start; font-size: .85rem; font-weight: 700; letter-spacing: .02em; padding: 4px 12px; border-radius: 999px; background: var(--leaf-soft); color: var(--leaf); }
+.points { list-style: none; margin: 0; padding: 0; display: grid; gap: 10px; }
+.points li { display: grid; grid-template-columns: 22px minmax(0, 1fr); gap: 10px; align-items: start; }
+.points li::before { content: ""; width: 10px; height: 10px; margin-top: .65em; border-radius: 50%; background: var(--primary); }
+.quote { background: var(--primary-soft); border-radius: 18px; padding: 14px 18px; font-size: 1.02rem; }
+.quote small { display: block; color: var(--muted); font-size: .85rem; margin-top: 4px; }
+
+/* everything else */
+.band { background: var(--surface-2); }
+.band h2 { font-size: clamp(2rem, 5vw, 3rem); }
+.grid { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 18px; margin-top: 28px; }
+.card { background: var(--surface); border: 1px solid var(--line); border-radius: var(--radius); padding: 22px; display: grid; gap: 8px; align-content: start; min-width: 0; }
+.card h3 { font-size: 1.45rem; }
+.card p { color: var(--muted); font-size: 1rem; }
+
+.tour { display: flex; gap: 22px; overflow-x: auto; padding: 28px 4px 22px; scroll-snap-type: x mandatory; }
+.tour figure { flex: 0 0 200px; margin: 0; display: grid; gap: 10px; scroll-snap-align: start; }
+.tour .phone { max-width: 200px; border-radius: 28px; padding: 7px; }
+.tour .phone img { border-radius: 22px; }
+.tour figcaption { text-align: center; font-weight: 700; font-size: .95rem; }
+
+/* install */
+.install { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; margin-top: 28px; }
+.install ol { margin: 0; padding-inline-start: 1.3em; display: grid; gap: 6px; }
+.install .card h3 { display: flex; align-items: center; gap: 10px; }
+.kbd { display: inline-block; padding: 0 8px; border-radius: 8px; background: var(--surface-2); border: 1px solid var(--line); font-size: .92rem; font-weight: 700; }
+.soon { color: var(--muted); font-size: .95rem; margin-top: 18px; }
+
+.faq { display: grid; gap: 12px; margin-top: 24px; max-width: 760px; }
+.faq details { background: var(--surface); border: 1px solid var(--line); border-radius: 18px; padding: 14px 20px; }
+.faq summary { cursor: pointer; font-weight: 700; }
+.faq details p { color: var(--muted); margin-top: 8px; }
+
+.final { text-align: center; display: grid; gap: 18px; justify-items: center; }
+.final h2 { font-size: clamp(2.4rem, 7vw, 4.2rem); }
+footer { border-top: 1px solid var(--line); padding-block: 24px 36px; color: var(--muted); font-size: .92rem; display: flex; flex-wrap: wrap; gap: 8px 20px; justify-content: space-between; }
+
+@media (max-width: 860px) {
+  .hero, .row { grid-template-columns: minmax(0, 1fr); gap: 32px; }
+  .row.flip .row-media { order: 0; }
+  .grid { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+  .phone { max-width: 260px; }
+}
+@media (max-width: 560px) {
+  body { font-size: 16px; }
+  .grid, .install { grid-template-columns: minmax(0, 1fr); }
+  .clock div { padding: 14px 12px; }
+  .clock b { font-size: 1.35rem; }
+  section { padding-block: 40px; }
+  .bar .btn-small { display: none; }
+}
+@media (prefers-reduced-motion: reduce) {
+  .btn, .dish { transition: none; }
+  .hero .phone { transform: none; }
+}
+</style>
+<!-- /head -->
+
+<div class="page" lang="ar" dir="rtl">
+  <header class="wrap bar">
+    <a class="brand" href="https://kitchen.darwish-tech.com/" aria-label="Darwish Kitchen">
+      <img src="img/logo.webp" alt="" width="44" height="44">
+      <span>Darwish Kitchen</span>
+    </a>
+    <a class="btn btn-primary btn-small" href="https://kitchen.darwish-tech.com/">افتح التطبيق</a>
+  </header>
+
+  <main>
+    <div class="wrap hero">
+      <div class="hero-copy">
+        <p class="eyebrow">مطبخ درويش · تطبيق وصفات بالعربي</p>
+        <h1>حناكل إيه النهارده؟</h1>
+        <p class="answer" aria-live="polite"><span>النهارده:</span> <span class="dish" id="dish">ملوخية بالفراخ</span></p>
+        <p class="lead">سؤال كل يوم في كل بيت. Darwish Kitchen بيجاوبه: بيختارلك أكلة على ذوقك وعلى حسب الوقت، ويقولك تعمل إيه باللي في تلاجتك، ويجيبلك الوصفات بالعربي من مواقع طبخ كتير.</p>
+        <div class="actions">
+          <a class="btn btn-primary" href="https://kitchen.darwish-tech.com/">ابدأ دلوقتي، مجانًا</a>
+          <a class="btn btn-soft" href="#install">نزّله على موبايلك</a>
+        </div>
+      </div>
+      <div class="phone" role="img" aria-label="الشاشة الرئيسية في التطبيق">
+        <img class="only-light" src="img/home.webp" alt="" width="780" height="1328">
+        <img class="only-dark" src="img/home-dark.webp" alt="" width="780" height="1328">
+      </div>
+    </div>
+
+    <div class="wrap" style="display:grid;gap:10px;padding-bottom:16px">
+      <div class="clock" aria-label="التطبيق بيختار الوجبة من الساعة">
+        <div><b>فطار</b><span>من 4 الفجر لـ 11 الصبح</span></div>
+        <div><b>غدا</b><span>من 11 الصبح لـ 5 العصر</span></div>
+        <div><b>عشا</b><span>من 5 العصر لآخر الليل</span></div>
+      </div>
+      <p class="clock-note">أول ما تفتح، التطبيق بيعرف الوجبة من الساعة، وانت تقدر تغيّرها بلمسة.</p>
+    </div>
+
+    <section>
+      <div class="wrap row">
+        <div class="row-copy">
+          <span class="tag">بالذكاء الاصطناعي</span>
+          <h2>اقتراح على ذوقك، ويقولك ليه</h2>
+          <p>دوس على "حناكل إيه النهارده؟" والاقتراح الذكي بيبص على الأكلات اللي عجبتك وقيّمتها، واللي شفتها الأيام اللي فاتت علشان ميكررهاش، وعلى اليوم والوقت، ويختارلك أكلة واحدة ومعاها السبب.</p>
+          <p class="quote">"النهارده الجمعة وانت بتحب المحشي، والجو برد يناسبه أكل بيتي دافي."<small>مثال لسبب الاقتراح</small></p>
+          <ul class="points">
+            <li>بيختار من وصفاتك ووصفات مطبخ درويش، وممكن يقترح أكلة جديدة خالص.</li>
+            <li>مش عاجبك الاقتراح؟ دوس "غيرها".</li>
+          </ul>
+        </div>
+        <div class="row-media"><div class="phone" role="img" aria-label="اقتراح أكلة ومعاه السبب"><img src="img/smart.webp" alt="" width="780" height="1328" loading="lazy"></div></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap row flip">
+        <div class="row-copy">
+          <span class="tag">بالذكاء الاصطناعي</span>
+          <h2>عندي في التلاجة…</h2>
+          <p>اكتب الحاجات اللي عندك أو صوّر التلاجة، وبعد لحظات يجيلك 3 أو 4 أكلات تقدر تعملها دلوقتي، بالمقادير والطريقة.</p>
+          <ul class="points">
+            <li>بيقولك لو ناقصك حاجة مهمة، أو "عندك كل حاجة".</li>
+            <li>تختار أكل أو مشروبات صحية أو عصائر.</li>
+            <li>أكل حلال بس، من غير خنزير ولا كحول.</li>
+          </ul>
+        </div>
+        <div class="row-media"><div class="phone" role="img" aria-label="أكلات مقترحة من المكونات"><img src="img/fridge.webp" alt="" width="780" height="1328" loading="lazy"></div></div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap row">
+        <div class="row-copy">
+          <span class="tag">من النت</span>
+          <h2>وصفات من مواقع طبخ كتير، مكتوبة بالعربي</h2>
+          <p>اكتب اسم أي أكلة أو مشروب، والذكاء الاصطناعي يدوّر في مواقع الطبخ العربي والأجنبي، ويكتبلك الوصفات بالعربي البسيط، ومع كل وصفة اسم الموقع ورابطها الأصلي.</p>
+          <ul class="points">
+            <li>Cookpad وفتافيت وBBC Good Food ومواقع تانية كتير.</li>
+            <li>احفظ أي وصفة في "وصفاتي" وعدّل عليها براحتك.</li>
+          </ul>
+        </div>
+        <div class="row-media"><div class="phone" role="img" aria-label="نتايج البحث من مواقع الطبخ"><img src="img/search.webp" alt="" width="780" height="1328" loading="lazy"></div></div>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="wrap">
+        <h2>وكمان</h2>
+        <div class="grid">
+          <article class="card"><h3>صوّر وصفة مكتوبة</h3><p>وصفة ماما في الكشكول؟ صوّر الصفحة، والتطبيق يكتبها في الخانات وانت تراجعها وتحفظها.</p></article>
+          <article class="card"><h3>الشيفات</h3><p>انشر وصفاتك باسمك وصورتك، وشوف وصفات باقي الناس، واعمل إعجاب واحفظ اللي يعجبك.</p></article>
+          <article class="card"><h3>وصفات درويش</h3><p>أكلات مصرية جاهزة، ومشروبات صحية زي الينسون والكركديه، وعصائر زي المانجا والفراولة باللبن.</p></article>
+          <article class="card"><h3>وصفاتي</h3><p>كل وصفة بصورتها ومكوناتها وطريقتها، مقسّمة أكل ومشروبات صحية وعصائر، مع بحث.</p></article>
+          <article class="card"><h3>نسخة احتياطية</h3><p>سجّل برقم موبايلك بكود على واتساب، وارفع وصفاتك وصورها، وارجّعها على أي موبايل تاني.</p></article>
+          <article class="card"><h3>عربي ومريح للعين</h3><p>من اليمين للشمال بالمصري، ووضع ليلي بيمشي مع إعدادات موبايلك.</p></article>
+        </div>
+        <div class="tour" aria-label="صور من التطبيق">
+          <figure><div class="phone"><img src="img/feed.webp" alt="وصفات الشيفات" width="780" height="1328" loading="lazy"></div><figcaption>الشيفات</figcaption></figure>
+          <figure><div class="phone"><img src="img/scan.webp" alt="إضافة وصفة من صورة" width="780" height="1328" loading="lazy"></div><figcaption>صوّر وصفة</figcaption></figure>
+          <figure><div class="phone"><img src="img/drinks.webp" alt="عصائر مطبخ درويش" width="780" height="1328" loading="lazy"></div><figcaption>العصائر</figcaption></figure>
+          <figure><div class="phone"><img src="img/home-dark.webp" alt="الوضع الليلي" width="780" height="1328" loading="lazy"></div><figcaption>الوضع الليلي</figcaption></figure>
+        </div>
+      </div>
+    </section>
+
+    <section id="install">
+      <div class="wrap">
+        <h2 style="font-size:clamp(2rem,5vw,3rem)">نزّله على موبايلك في دقيقة</h2>
+        <p class="lead" style="margin-top:10px">مش محتاج متجر. افتح الموقع من الموبايل وثبّته، فيظهرلك أيقونة على الشاشة ويفتح زي أي تطبيق، وكل تحديث بيوصلك لوحده.</p>
+        <div class="install">
+          <article class="card">
+            <h3>آيفون</h3>
+            <ol>
+              <li>افتح <b>kitchen.darwish-tech.com</b> من Safari.</li>
+              <li>دوس على زرار المشاركة <span class="kbd">⬆︎</span>.</li>
+              <li>اختار <span class="kbd">Add to Home Screen</span>.</li>
+            </ol>
+          </article>
+          <article class="card">
+            <h3>أندرويد</h3>
+            <ol>
+              <li>افتح <b>kitchen.darwish-tech.com</b> من Chrome.</li>
+              <li>دوس على القايمة <span class="kbd">⋮</span>.</li>
+              <li>اختار <span class="kbd">Install app</span> أو <span class="kbd">Add to Home screen</span>.</li>
+            </ol>
+          </article>
+        </div>
+        <p class="soon">بيشتغل كمان على الكمبيوتر من أي متصفح.</p>
+      </div>
+    </section>
+
+    <section class="band">
+      <div class="wrap">
+        <h2 style="font-size:clamp(2rem,5vw,3rem)">أسئلة بتتسأل كتير</h2>
+        <div class="faq">
+          <details open><summary>التطبيق بفلوس؟</summary><p>لأ، مجاني. مميزات الذكاء الاصطناعي ليها عدد مرات في اليوم لكل حساب.</p></details>
+          <details><summary>بياناتي بتتحفظ فين؟</summary><p>وصفاتك وملفك وتقييماتك محفوظين على موبايلك نفسه. السيرفر بيتستخدم بس لو عملت نسخة احتياطية، أو نشرت وصفة للشيفات.</p></details>
+          <details><summary>لازم أعمل حساب؟</summary><p>لأ، تقدر تستخدم التطبيق من غير حساب. الحساب برقم الموبايل (كود على واتساب) محتاجه للنسخة الاحتياطية، والنشر للشيفات، ومميزات الذكاء الاصطناعي.</p></details>
+          <details><summary>الوصفات اللي بيكتبها الذكاء الاصطناعي مضمونة؟</summary><p>وصفات النت بيجيبها من مواقع طبخ معروفة ومعاها رابط المصدر. الأفكار اللي بيكتبها لوحده (زي التلاجة) بنكتب عليها إنها من الذكاء الاصطناعي، فذوقها وعدّل المقادير على مزاجك.</p></details>
+        </div>
+      </div>
+    </section>
+
+    <section>
+      <div class="wrap final">
+        <h2>يلا نختار أكلة النهارده</h2>
+        <a class="btn btn-primary" href="https://kitchen.darwish-tech.com/">افتح Darwish Kitchen</a>
+      </div>
+    </section>
+  </main>
+
+  <footer class="wrap">
+    <span>Darwish Kitchen · من Darwish Tech</span>
+    <a href="https://kitchen.darwish-tech.com/">kitchen.darwish-tech.com</a>
+  </footer>
+</div>
+
+<script>
+(() => {
+  const dishes = ['ملوخية بالفراخ', 'محشي كرنب', 'شكشوكة', 'كشري', 'فتة شاورما', 'عصير مانجا', 'كركديه بارد'];
+  const el = document.getElementById('dish');
+  if (!el || window.matchMedia('(prefers-reduced-motion: reduce)').matches) return;
+  let i = 0;
+  setInterval(() => {
+    el.classList.add('out');
+    setTimeout(() => {
+      i = (i + 1) % dishes.length;
+      el.textContent = dishes[i];
+      el.classList.remove('out');
+    }, 260);
+  }, 2400);
+})();
+</script>
