@@ -22,6 +22,12 @@ const app = createApp({
   seedFile,
   // Control-panel admins, e.g. ADMIN_PHONES=01001234567,01112223334
   admins: (process.env.ADMIN_PHONES ?? '').split(/[\s,]+/).filter(Boolean),
+  // AI recipe search with Claude: needs ANTHROPIC_API_KEY (in the settings file).
+  ai: {
+    apiKey: process.env.ANTHROPIC_API_KEY || undefined,
+    model: process.env.AI_MODEL || undefined,
+    dailyLimit: Number(process.env.AI_DAILY_LIMIT) || undefined,
+  },
   otp: {
     url: process.env.OTP_URL || undefined,
     token: process.env.OTP_TOKEN || undefined,
@@ -32,7 +38,7 @@ const app = createApp({
 const server = createServer(app);
 server.requestTimeout = 120_000;
 server.listen(port, host, () =>
-  console.log(`Darwish Kitchen API on http://${host}:${port} (data: ${dataDir}, OTP: ${process.env.OTP_URL ? 'Darwish OTP' : process.env.OTP_DEV_CODES === '1' ? 'dev codes' : 'NOT CONFIGURED'})`),
+  console.log(`Darwish Kitchen API on http://${host}:${port} (data: ${dataDir}, OTP: ${process.env.OTP_URL ? 'Darwish OTP' : process.env.OTP_DEV_CODES === '1' ? 'dev codes' : 'NOT CONFIGURED'}, AI: ${process.env.ANTHROPIC_API_KEY ? 'on' : 'off'})`),
 );
 
 const stop = () => server.close(() => {

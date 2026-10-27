@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createRateLimiter, hashToken, newToken } from './auth.mjs';
+import { createAi } from './ai.mjs';
 import { createCatalog } from './catalog.mjs';
 import { openDb } from './db.mjs';
 import { clientIp, HttpError, readBody, readJson, send } from './http.mjs';
@@ -25,12 +26,14 @@ function phoneFrom(body) {
  * Builds the request handler. `dataDir` holds the SQLite file and users' photos.
  * `otp` configures login codes (see otp.mjs): { url, token } for Darwish OTP, or { devCodes, onDevCode } for tests.
  * `admins`: phone numbers allowed into the control panel. `seedFile`: starter recipes for a new catalog.
+ * `ai`: AI recipe search (see ai.mjs) — { apiKey, model, dailyLimit }; disabled without an API key.
  */
-export function createApp({ dataDir, otp: otpConfig = {}, admins = [], seedFile }) {
+export function createApp({ dataDir, otp: otpConfig = {}, admins = [], seedFile, ai: aiConfig = {} }) {
   const db = openDb(dataDir);
   const adminPhones = new Set(admins.map((p) => normalizePhone(p)).filter(Boolean));
   const catalogRoute = createCatalog({ db, dataDir, seedFile });
   const posts = createPosts({ db, dataDir });
+  const ai = createAi({ db, ...aiConfig });
   const imagesRoot = join(dataDir, 'images');
   const otp = createOtp(otpConfig);
   const sendPerIp = createRateLimiter({ limit: 10, windowMs: 15 * 60 * 1000 });
@@ -114,7 +117,7 @@ export function createApp({ dataDir, otp: otpConfig = {}, admins = [], seedFile 
   async function route(req, res, path) {
     const m = req.method;
 
-    if (path === '/api/health' && m === 'GET') return send(res, 200, { ok: true, otp: otp.enabled });
+    if (path === '/api/health' && m === 'GET') return send(res, 200, { ok: true, otp: otp.enabled, ai: ai.enabled });
 
     if (path === '/api/auth/otp/send' && m === 'POST') {
       const phone = phoneFrom(await readJson(req));
@@ -247,6 +250,7 @@ export function createApp({ dataDir, otp: otpConfig = {}, admins = [], seedFile 
     }
 
     if (await posts.route(req, res, path, { requireUser, optionalUser, isAdmin })) return;
+    if (await ai.route(req, res, path, { requireUser, isAdmin })) return;
     if (await catalogRoute(req, res, path, requireAdmin)) return;
 
     throw new HttpError(404, 'not-found');

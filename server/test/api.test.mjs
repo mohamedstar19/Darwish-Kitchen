@@ -208,7 +208,7 @@ test('without OTP config, login is unavailable', async () => {
       body: JSON.stringify({ phone: '01001234567' }),
     });
     assert.equal(res.status, 503);
-    assert.deepEqual(await (await fetch(`http://127.0.0.1:${off.address().port}/api/health`)).json(), { ok: true, otp: false });
+    assert.deepEqual(await (await fetch(`http://127.0.0.1:${off.address().port}/api/health`)).json(), { ok: true, otp: false, ai: false });
   } finally {
     off.close();
     offApp.close();

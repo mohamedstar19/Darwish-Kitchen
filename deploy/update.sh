@@ -30,7 +30,7 @@ WEB_BASE_URL="" npm run build:web
 log "2/4 bundle"
 mkdir -p "$LOCAL_DIR/bundle/deploy"
 cp -r dist "$LOCAL_DIR/bundle/web"
-mkdir -p "$LOCAL_DIR/bundle/server/seed" && cp -r server/package.json server/src "$LOCAL_DIR/bundle/server/"
+mkdir -p "$LOCAL_DIR/bundle/server/seed" && cp -r server/package.json server/package-lock.json server/src "$LOCAL_DIR/bundle/server/"
 cp src/data/starter-recipes.json "$LOCAL_DIR/bundle/server/seed/"
 cp deploy/install.sh deploy/kitchen-nginx.conf "$LOCAL_DIR/bundle/deploy/"
 tar -czf "$LOCAL_DIR/kitchen.tar.gz" -C "$LOCAL_DIR/bundle" .

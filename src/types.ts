@@ -70,15 +70,26 @@ export const categoryOf = (r: Pick<Recipe, 'category'>): RecipeCategory => r.cat
 
 /** A recipe fetched from the internet (TheMealDB), not yet saved. */
 export type WebRecipe = {
+  /** TheMealDB id, or "ai-…" for a recipe found by the AI search. */
   webId: string;
   title: string;
   image?: string;
+  /** TheMealDB category (English). */
   category?: string;
   area?: string;
   ingredients: string[];
   steps: string[];
   sourceUrl?: string;
   youtube?: string;
+  /** Set for AI search results: written in Arabic from a recipe site. */
+  ai?: {
+    category: RecipeCategory;
+    mealTypes: MealType[];
+    sourceName: string;
+    prepMinutes?: number | null;
+    servings?: number | null;
+    notes?: string | null;
+  };
 };
 
 export function mealTypeForNow(date = new Date()): MealType {

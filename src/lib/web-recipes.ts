@@ -8,6 +8,22 @@ export function rememberWebRecipe(recipe: WebRecipe) {
 }
 
 export function webToRecipeInput(web: WebRecipe, meal?: MealType): RecipeInput {
+  if (web.ai) {
+    return {
+      title: web.title,
+      category: web.ai.category,
+      mealTypes: web.ai.category === 'food' ? web.ai.mealTypes : [],
+      image: web.image,
+      ingredients: web.ingredients,
+      steps: web.steps,
+      prepMinutes: web.ai.prepMinutes ?? undefined,
+      servings: web.ai.servings ?? undefined,
+      notes: web.ai.notes ?? undefined,
+      source: 'web',
+      sourceUrl: web.sourceUrl,
+      webId: web.webId,
+    };
+  }
   const mealTypes: MealType[] = web.category === 'Breakfast' ? ['breakfast'] : meal ? [meal] : ['lunch', 'dinner'];
   return {
     title: web.title,

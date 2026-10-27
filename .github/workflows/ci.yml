@@ -17,6 +17,8 @@ jobs:
       - run: npm ci
       - run: npm run typecheck
       - run: npm run build:web
-      - name: Backup server tests
+      - name: Server tests
         working-directory: server
-        run: npm test
+        run: |
+          npm ci
+          npm test

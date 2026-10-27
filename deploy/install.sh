@@ -52,6 +52,7 @@ if [[ ! -f "$OTP_ENV" ]]; then
     echo "OTP_TOKEN=$(read_quran WHATSAPP_OTP_TOKEN)"
   } > "$OTP_ENV"
 fi
+grep -q '^ANTHROPIC_API_KEY=' "$OTP_ENV" || printf '\n# AI recipe search (Claude): key from console.anthropic.com. Optional: AI_MODEL, AI_DAILY_LIMIT (searches per user per day, default 20)\nANTHROPIC_API_KEY=\n' >> "$OTP_ENV"
 grep -q '^ADMIN_PHONES=' "$OTP_ENV" || printf '\n# Control-panel admins (phone numbers, comma-separated)\nADMIN_PHONES=\n' >> "$OTP_ENV"
 # deploy/update.sh can pass ADMIN_PHONES=01001234567,... to set the admins.
 if [[ -n "${ADMIN_PHONES:-}" ]]; then
@@ -61,8 +62,10 @@ fi
 chown "$APP_USER:$APP_USER" "$OTP_ENV" && chmod 600 "$OTP_ENV"
 
 log "3/6 backup API"
-rsync -a --delete "$BUNDLE/server/" "$APP_HOME/server/" --exclude data
+rsync -a --delete --exclude data --exclude node_modules "$BUNDLE/server/" "$APP_HOME/server/"
 chown -R "$APP_USER:$APP_USER" "$APP_HOME"
+# The API's only dependency is Anthropic's SDK (AI search).
+sudo -u "$APP_USER" -H bash -lc "cd '$APP_HOME/server' && npm ci --omit=dev --no-audit --no-fund --loglevel=error"
 
 log "4/6 web app"
 rsync -a --delete "$BUNDLE/web/" "$APP_HOME/web/"
@@ -120,6 +123,9 @@ for _ in 1 2 3 4 5; do
     echo -e "\n\033[1;32m✅ Darwish Kitchen is running.\033[0m API: 127.0.0.1:$PORT · web: $APP_HOME/web"
     if ! grep -q '^ADMIN_PHONES=.' "$OTP_ENV"; then
       echo -e "\033[1;33mℹ️  No control-panel admin yet. Re-run with: ADMIN_PHONES=<your phone> bash deploy/update.sh <server>\033[0m"
+    fi
+    if ! grep -q '"ai":true' <<<"$HEALTH"; then
+      echo -e "\033[1;33mℹ️  AI recipe search is off. Add ANTHROPIC_API_KEY to $OTP_ENV, then: sudo -u $APP_USER pm2 restart kitchen\033[0m"
     fi
     if ! grep -q '"otp":true' <<<"$HEALTH"; then
       echo -e "\033[1;33m⚠️  Login codes are not set up yet. Put the Darwish OTP URL and token (Quran admin → Settings) in:\033[0m"

@@ -16,7 +16,8 @@
 | `src/app/feed/[id].tsx` | A chef's recipe: like, save, report, delete (own/admin) |
 | `src/app/darwish/` | "وصفات درويش" list (sections) and detail (like, rate, copy to my recipes) |
 | `src/app/(tabs)/recipes.tsx` | "وصفاتي": only the user's own + saved recipes; search, sections, filters |
-| `src/app/(tabs)/discover.tsx` | Search TheMealDB |
+| `src/app/(tabs)/discover.tsx` | "من النت": AI search across many recipe sites (Arabic) + TheMealDB |
+| `src/lib/ai-search.ts`, `server/src/ai.mjs` | AI recipe search client / server (Claude + web search) |
 | `src/app/recipe/[id].tsx` | Saved recipe details, favorite, edit, delete |
 | `src/app/recipe/edit.tsx` | Add / edit form with photo (`?id=` to edit) |
 | `src/app/online/[id].tsx` | Internet recipe details + save |
@@ -71,6 +72,16 @@
 - **وصفات درويش** is the admin catalog, kept separately (`DarwishProvider`, cached in `darwish-kitchen.darwish-cache.v1`, bundled `starter-recipes.json` as offline fallback). Likes/ratings/views use ref kind `darwish`. "خد نسخة وعدّلها" copies one into وصفاتي.
 - Suggestions ("من التطبيق") pick from my food recipes + Darwish food; "الاتنين" also mixes in TheMealDB.
 - Data version 3 (`storage.ts`, `migrated()`): untouched starters leave وصفاتي, edited ones become `user` recipes, and activity refs on removed starters become `darwish`. Every loader awaits the same migration.
+
+## AI recipe search ("من النت")
+
+- `POST /api/ai/search {query, category?}` (signed in): Claude (`claude-opus-5-5`, effort `low`, server-side `fallbacks: "default"`) uses `web_search_20260209` (max 4) and `web_fetch_20260209` (max 6) to find up to 6 recipes on different sites (Arabic and international), then returns them through a strict `submit_recipes` tool, written in Egyptian Arabic with `source_name`/`source_url`. `pause_turn` responses are sent back to continue.
+- Server checks: each `source_url` must have appeared in the web tools' **results** (not Claude's own text), one recipe per page, title + ≥2 ingredients + ≥1 step, no pork/alcohol (English and Arabic words). Photos come from the page's `og:image`/`twitter:image`; the fetch refuses private/internal addresses (checked on every redirect) and reads only the page head.
+- Cost control: login required; `AI_DAILY_LIMIT` new searches per user per day (default 20, admins unlimited); identical searches (query + section) are cached 7 days and free; concurrent identical searches share one job.
+- Cloudflare cuts requests at 100 s, so the endpoint waits ~25 s then answers `202 {pending}`; the app repeats the same POST every 2.5 s (up to 5 min) until it gets `200 {recipes}`.
+- Results are stored (`ai_recipes`) so `GET /api/ai/recipes/:id` can reopen them; in the app they are `WebRecipe`s with `webId: "ai-…"` and an `ai` block (category, meal types, source), shown right-to-left, saved as `source: web`.
+- Settings in `/opt/darwish-kitchen/otp.env`: `ANTHROPIC_API_KEY` (required to turn it on), optional `AI_MODEL`, `AI_DAILY_LIMIT`. `/api/health` reports `ai`.
+- The server's only npm dependency is `@anthropic-ai/sdk` (installed by `install.sh` with `npm ci`).
 
 ## Chefs feed
 
