@@ -33,6 +33,8 @@ cp -r dist "$LOCAL_DIR/bundle/web"
 mkdir -p "$LOCAL_DIR/bundle/server/seed" && cp -r server/package.json server/package-lock.json server/src "$LOCAL_DIR/bundle/server/"
 cp src/data/starter-recipes.json "$LOCAL_DIR/bundle/server/seed/"
 cp deploy/install.sh deploy/kitchen-nginx.conf "$LOCAL_DIR/bundle/deploy/"
+# A Windows checkout may have CRLF line endings; the server's bash and nginx need LF.
+sed -i 's/\r$//' "$LOCAL_DIR/bundle/deploy/install.sh" "$LOCAL_DIR/bundle/deploy/kitchen-nginx.conf"
 tar -czf "$LOCAL_DIR/kitchen.tar.gz" -C "$LOCAL_DIR/bundle" .
 echo "   size: $(du -h "$LOCAL_DIR/kitchen.tar.gz" | cut -f1)"
 
