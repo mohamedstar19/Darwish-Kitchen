@@ -5,6 +5,8 @@ import { Pressable, ScrollView, StyleSheet, Text, View } from 'react-native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { Badge, Button, Card, Chip, Meta, Muted, RecipeImage } from '../../components/ui';
 import { CATEGORY_AR } from '../../lib/mealdb';
+import { DarwishSlider } from '../../components/DarwishSlider';
+import { useDarwish } from '../../lib/darwish-context';
 import { useRecipes } from '../../lib/recipes-context';
 import { suggestMeal, type SuggestSource, type Suggestion } from '../../lib/suggest';
 import { rememberWebRecipe, webToRecipeInput } from '../../lib/web-recipes';
@@ -21,7 +23,7 @@ const DRINK_SECTIONS: { key: RecipeCategory; hint: string }[] = [
 
 const SOURCES: { key: SuggestSource; label: string }[] = [
   { key: 'all', label: 'الاتنين' },
-  { key: 'mine', label: 'من وصفاتي' },
+  { key: 'mine', label: 'من التطبيق' },
   { key: 'web', label: 'من النت' },
 ];
 
@@ -34,6 +36,7 @@ export default function HomeScreen() {
   const c = useTheme();
   const insets = useSafeAreaInsets();
   const { recipes, addRecipe } = useRecipes();
+  const darwish = useDarwish();
   const [meal, setMeal] = useState<MealType>(mealTypeForNow());
   const [source, setSource] = useState<SuggestSource>('all');
   const [loading, setLoading] = useState(false);
@@ -46,8 +49,8 @@ export default function HomeScreen() {
     setLoading(true);
     setError(null);
     try {
-      const result = await suggestMeal(meal, source, recipes, recent.current);
-      const id = result.kind === 'local' ? result.recipe.id : result.recipe.webId;
+      const result = await suggestMeal(meal, source, { mine: recipes, darwish: darwish.recipes }, recent.current);
+      const id = result.kind === 'web' ? result.recipe.webId : result.recipe.id;
       recent.current = [id, ...recent.current].slice(0, 5);
       if (result.kind === 'web') rememberWebRecipe(result.recipe);
       setSuggestion(result);
@@ -82,6 +85,7 @@ export default function HomeScreen() {
   const open = () => {
     if (!suggestion) return;
     if (suggestion.kind === 'local') router.push({ pathname: '/recipe/[id]', params: { id: suggestion.recipe.id } });
+    else if (suggestion.kind === 'darwish') router.push({ pathname: '/darwish/[id]', params: { id: suggestion.recipe.id } });
     else router.push({ pathname: '/online/[id]', params: { id: suggestion.recipe.webId, meal } });
   };
 
@@ -98,6 +102,8 @@ export default function HomeScreen() {
           <Muted>{greeting()} 👋 يلا نختار أكلة النهارده</Muted>
         </View>
       </View>
+
+      <DarwishSlider />
 
       <Card>
         <Text style={[styles.label, { color: c.text }]}>الوجبة</Text>
@@ -129,13 +135,13 @@ export default function HomeScreen() {
             <View style={styles.chips}>
               <Badge label={`${MEAL_LABELS[meal]} النهارده`} />
               <Badge
-                label={suggestion.kind === 'local' ? 'من وصفاتي' : 'من النت'}
-                tone={suggestion.kind === 'local' ? 'accent' : 'muted'}
+                label={suggestion.kind === 'local' ? 'من وصفاتي' : suggestion.kind === 'darwish' ? 'من مطبخ درويش' : 'من النت'}
+                tone={suggestion.kind === 'web' ? 'muted' : 'accent'}
               />
             </View>
             <Text style={[styles.resultTitle, { color: c.text }]}>{suggestion.recipe.title}</Text>
             <View style={styles.chips}>
-              {suggestion.kind === 'local' && suggestion.recipe.prepMinutes ? (
+              {suggestion.kind !== 'web' && suggestion.recipe.prepMinutes ? (
                 <Meta icon="hourglass-outline" label={`${suggestion.recipe.prepMinutes} دقيقة`} />
               ) : null}
               {suggestion.kind === 'web' && suggestion.recipe.category ? (
@@ -160,7 +166,7 @@ export default function HomeScreen() {
       ) : !error && !loading ? (
         <View style={[styles.hint, { borderColor: c.border }]}>
           <Ionicons name="sparkles-outline" size={28} color={c.primary} />
-          <Muted style={{ textAlign: 'center' }}>اختار الوجبة ودوس على الزرار، وإحنا نقترح عليك أكلة من وصفاتك أو من النت.</Muted>
+          <Muted style={{ textAlign: 'center' }}>اختار الوجبة ودوس على الزرار، وإحنا نقترح عليك أكلة من وصفاتك ومطبخ درويش أو من النت.</Muted>
         </View>
       ) : null}
 
@@ -172,13 +178,13 @@ export default function HomeScreen() {
               key={key}
               accessibilityRole="button"
               accessibilityLabel={CATEGORY_LABELS[key]}
-              onPress={() => router.navigate({ pathname: '/recipes', params: { section: key } })}
+              onPress={() => router.push({ pathname: '/darwish', params: { section: key } })}
               style={({ pressed }) => [styles.tile, { backgroundColor: c.card, borderColor: c.border, opacity: pressed ? 0.85 : 1 }]}>
               <View style={[styles.tileIcon, { backgroundColor: key === 'juice' ? c.primarySoft : c.accentSoft }]}>
                 <Ionicons name={CATEGORY_ICONS[key]} size={24} color={key === 'juice' ? c.primary : c.accent} />
               </View>
               <Text style={[styles.tileTitle, { color: c.text }]}>{CATEGORY_LABELS[key]}</Text>
-              <Muted style={{ fontSize: 12 }}>{`${recipes.filter((r) => categoryOf(r) === key).length} وصفة • ${hint}`}</Muted>
+              <Muted style={{ fontSize: 12 }}>{`${darwish.recipes.filter((r) => categoryOf(r) === key).length} وصفة • ${hint}`}</Muted>
             </Pressable>
           ))}
         </View>

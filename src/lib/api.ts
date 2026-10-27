@@ -30,15 +30,16 @@ export async function setAuth(auth: Auth | null) {
   await writeJson(KEYS.auth, auth);
 }
 
-type Options = { method?: string; json?: unknown; body?: ArrayBuffer; type?: string; auth?: boolean };
+/** auth: true = must be signed in; 'optional' = send the login if there is one (public pages); false = never. */
+type Options = { method?: string; json?: unknown; body?: ArrayBuffer; type?: string; auth?: boolean | 'optional' };
 
 /** Calls the backup API. Throws ApiError with the server's error code; 'network' when offline. */
 export async function api<T = unknown>(path: string, { method, json, body, type, auth = true }: Options = {}): Promise<T> {
   const headers: Record<string, string> = {};
   if (auth) {
     const a = await getAuth();
-    if (!a) throw new ApiError(401, 'signed-out');
-    headers.Authorization = `Bearer ${a.token}`;
+    if (!a && auth === true) throw new ApiError(401, 'signed-out');
+    if (a) headers.Authorization = `Bearer ${a.token}`;
   }
   if (json !== undefined) headers['Content-Type'] = 'application/json';
   if (type) headers['Content-Type'] = type;
@@ -57,7 +58,7 @@ export async function api<T = unknown>(path: string, { method, json, body, type,
   const data = await res.json().catch(() => ({}));
   if (!res.ok) {
     // An expired or revoked login: forget it so the app shows the sign-in button again.
-    if (res.status === 401 && auth) await setAuth(null);
+    if (res.status === 401 && auth === true) await setAuth(null);
     throw new ApiError(res.status, (data as { error?: string }).error ?? 'server-error');
   }
   return data as T;

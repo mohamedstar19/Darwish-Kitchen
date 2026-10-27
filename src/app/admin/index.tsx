@@ -2,6 +2,7 @@ import { Ionicons } from '@expo/vector-icons';
 import { router, Stack, useFocusEffect } from 'expo-router';
 import { useCallback, useMemo, useState } from 'react';
 import { ActivityIndicator, FlatList, StyleSheet, Text, TextInput, View } from 'react-native';
+import { ChefsModeration } from '../../components/ChefsModeration';
 import { RecipeListItem } from '../../components/RecipeListItem';
 import { Button, Chip, EmptyState, Muted } from '../../components/ui';
 import { adminList } from '../../lib/admin-api';
@@ -21,6 +22,7 @@ export default function AdminScreen() {
   const [error, setError] = useState(false);
   const [filter, setFilter] = useState<Filter>('all');
   const [query, setQuery] = useState('');
+  const [mode, setMode] = useState<'darwish' | 'chefs'>('darwish');
 
   useFocusEffect(
     useCallback(() => {
@@ -57,6 +59,22 @@ export default function AdminScreen() {
     );
   }
 
+  const switcher = (
+    <View style={styles.chips}>
+      <Chip label="وصفات درويش" icon="restaurant-outline" selected={mode === 'darwish'} onPress={() => setMode('darwish')} />
+      <Chip label="وصفات الشيفات" icon="people-outline" selected={mode === 'chefs'} onPress={() => setMode('chefs')} />
+    </View>
+  );
+
+  if (mode === 'chefs') {
+    return (
+      <View style={{ flex: 1, backgroundColor: c.background }}>
+        <Stack.Screen options={{ title: 'لوحة التحكم' }} />
+        <ChefsModeration header={switcher} />
+      </View>
+    );
+  }
+
   const noPhoto = (recipes ?? []).filter((r) => !r.image).length;
   const filters: { key: Filter; label: string }[] = [
     { key: 'all', label: `الكل (${recipes?.length ?? 0})` },
@@ -74,7 +92,8 @@ export default function AdminScreen() {
         contentContainerStyle={styles.list}
         ListHeaderComponent={
           <View style={{ gap: space.md }}>
-            <Muted>الوصفات دي بتظهر عند كل اللي عندهم التطبيق. أي تعديل أو صورة بتوصلهم أول ما يفتحوا التطبيق.</Muted>
+            {switcher}
+            <Muted>الوصفات دي بتظهر عند كل اللي عندهم التطبيق. بتظهر في "وصفات درويش" وفي السلايدر في الرئيسية.</Muted>
             <View style={[styles.search, { backgroundColor: c.card, borderColor: c.border }]}>
               <Ionicons name="search" size={18} color={c.muted} />
               <TextInput value={query} onChangeText={setQuery} placeholder="دوّر بالاسم…" placeholderTextColor={c.muted} style={[styles.input, { color: c.text }]} />

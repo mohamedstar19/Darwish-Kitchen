@@ -2,12 +2,14 @@ import { createContext, useCallback, useContext, useEffect, useMemo, useRef, use
 import { refKey, type Activity, type Recipe, type RecipeRef } from '../types';
 import { useDataGeneration } from './data-reload';
 import { KEYS, readJson, writeJson } from './kv';
+import { migrated } from './storage';
 
 const MAX_VIEWS = 60;
 const EMPTY: Activity = { likes: {}, ratings: {}, views: [] };
 
 /** First run with the activity store: carry over old "favorite" flags as likes. */
 async function loadActivity(): Promise<Activity> {
+  await migrated();
   const stored = await readJson<Activity>(KEYS.activity);
   if (stored) return { ...EMPTY, ...stored };
   const recipes = (await readJson<Recipe[]>(KEYS.recipes)) ?? [];

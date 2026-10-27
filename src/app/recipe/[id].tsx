@@ -50,6 +50,8 @@ export default function RecipeScreen() {
             <Badge key={m} label={MEAL_LABELS[m]} />
           ))}
           {recipe.source === 'web' ? <Badge label="من النت" tone="muted" /> : null}
+          {recipe.source === 'feed' ? <Badge label="من الشيفات" tone="muted" /> : null}
+          {recipe.postId ? <Badge label="منشورة في الفيد" tone="accent" /> : null}
         </View>
         <View style={styles.row}>
           {recipe.prepMinutes ? <Meta icon="hourglass-outline" label={`${recipe.prepMinutes} دقيقة`} /> : null}
@@ -81,6 +83,14 @@ export default function RecipeScreen() {
 
       <RecipeBody ingredients={recipe.ingredients} steps={recipe.steps} notes={recipe.notes} />
 
+      {recipe.postId || recipe.feedId ? (
+        <Button
+          label={recipe.postId ? 'شوفها في الفيد' : 'شوف الوصفة الأصلية'}
+          icon="people-outline"
+          variant="ghost"
+          onPress={() => router.push({ pathname: '/feed/[id]', params: { id: (recipe.postId ?? recipe.feedId)! } })}
+        />
+      ) : null}
       {recipe.sourceUrl ? (
         <Button label="المصدر الأصلي" icon="open-outline" variant="ghost" onPress={() => Linking.openURL(recipe.sourceUrl!)} />
       ) : null}

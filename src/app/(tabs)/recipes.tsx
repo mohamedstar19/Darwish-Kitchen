@@ -117,11 +117,21 @@ export default function RecipesScreen() {
         )}
         ListEmptyComponent={
           ready ? (
-            <EmptyState
-              icon="book-outline"
-              title={recipes.length ? 'مفيش نتايج' : 'لسه مفيش وصفات'}
-              message={recipes.length ? 'جرّب كلمة تانية أو فلتر تاني.' : 'ضيف أول وصفة ليك بصورتها.'}
-            />
+            recipes.length ? (
+              <EmptyState icon="search-outline" title="مفيش نتايج" message="جرّب كلمة تانية أو فلتر تاني." />
+            ) : (
+              <EmptyState
+                icon="book-outline"
+                title="دي مساحتك يا شيف 👨‍🍳"
+                message="هنا هتلاقي الوصفات اللي بتضيفها بصورها، واللي بتحفظها من الشيفات ومن النت."
+                action={
+                  <View style={{ gap: space.sm, alignSelf: 'stretch' }}>
+                    <Button label="ضيف أول وصفة" icon="add" onPress={() => router.push('/recipe/edit')} />
+                    <Button label="شوف وصفات درويش" icon="restaurant-outline" variant="secondary" onPress={() => router.push('/darwish')} />
+                  </View>
+                }
+              />
+            )
           ) : undefined
         }
       />

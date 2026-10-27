@@ -6,6 +6,9 @@ import { Button, Chip, Muted, RecipeImage } from '../../components/ui';
 import { notify } from '../../lib/confirm';
 import { goBack } from '../../lib/nav';
 import { pickRecipeImage, type ImageSource } from '../../lib/images';
+import { useAuth } from '../../lib/auth-context';
+import { useProfile } from '../../lib/profile-context';
+import { publishRecipe, unpublishRecipe } from '../../lib/publish';
 import { useRecipes } from '../../lib/recipes-context';
 import { radius, space, useTheme } from '../../theme';
 import { CATEGORIES, CATEGORY_ICONS, CATEGORY_LABELS_ONE, categoryOf, MEAL_LABELS, MEAL_TYPES, type MealType, type RecipeCategory } from '../../types';
@@ -33,7 +36,13 @@ export default function EditRecipeScreen() {
 function RecipeForm({ id, initialCategory }: { id?: string; initialCategory: RecipeCategory }) {
   const c = useTheme();
   const { getRecipe, addRecipe, updateRecipe } = useRecipes();
+  const { auth } = useAuth();
+  const { profile, updateProfile } = useProfile();
   const existing = id ? getRecipe(id) : undefined;
+  // Only the user's own recipes can go to the feed (not ones saved from other chefs or the internet).
+  const canPublish = !existing || existing.source === 'user';
+  const [publish, setPublish] = useState(existing ? !!existing.postId : true);
+  const [chefName, setChefName] = useState('');
 
   const [image, setImage] = useState<string | undefined>(existing?.image);
   const [title, setTitle] = useState(existing?.title ?? '');
@@ -72,6 +81,8 @@ function RecipeForm({ id, initialCategory }: { id?: string; initialCategory: Rec
     const problems: string[] = [];
     if (!title.trim()) problems.push('اكتب اسم الوصفة.');
     if (isFood && !mealTypes.length) problems.push('اختار الوجبة (فطار، غداء أو عشاء).');
+    const sharing = canPublish && publish && !!auth;
+    if (sharing && !profile.name && chefName.trim().length < 2) problems.push('اكتب اسمك اللي هيظهر على الوصفة في الفيد.');
     setErrors(problems);
     if (problems.length) return;
 
@@ -88,19 +99,37 @@ function RecipeForm({ id, initialCategory }: { id?: string; initialCategory: Rec
     };
 
     setSaving(true);
+    let saved;
     try {
       if (existing) {
         await updateRecipe(existing.id, input);
-        goBack({ pathname: '/recipe/[id]', params: { id: existing.id } });
+        saved = { ...existing, ...input };
       } else {
-        const created = await addRecipe({ ...input, source: 'user' });
-        router.replace({ pathname: '/recipe/[id]', params: { id: created.id } });
+        saved = await addRecipe({ ...input, source: 'user' });
       }
     } catch {
-      notify('مقدرناش نحفظ الوصفة', 'مساحة التخزين ممكن تكون مليانة. جرّب صورة أصغر.');
-    } finally {
       setSaving(false);
+      notify('مقدرناش نحفظ الوصفة', 'مساحة التخزين ممكن تكون مليانة. جرّب صورة أصغر.');
+      return;
     }
+
+    // The recipe is safe on the phone; now share it (or take it down) in the chefs feed.
+    try {
+      if (sharing) {
+        const chef = profile.name ? profile : { ...profile, name: chefName.trim() };
+        if (!profile.name) await updateProfile({ name: chef.name });
+        const postId = await publishRecipe(saved, chef);
+        if (postId !== saved.postId) await updateRecipe(saved.id, { postId });
+      } else if (canPublish && !publish && saved.postId) {
+        await unpublishRecipe(saved.postId);
+        await updateRecipe(saved.id, { postId: undefined });
+      }
+    } catch {
+      notify('اتحفظت عندك ✅', 'بس مقدرناش نحدّثها في الفيد دلوقتي. اتأكد من الإنترنت واحفظها تاني.');
+    }
+    setSaving(false);
+    if (existing) goBack({ pathname: '/recipe/[id]', params: { id: existing.id } });
+    else router.replace({ pathname: '/recipe/[id]', params: { id: saved.id } });
   };
 
   const field = (label: string, props: TextInputProps, hint?: string) => (
@@ -204,6 +233,31 @@ function RecipeForm({ id, initialCategory }: { id?: string; initialCategory: Rec
           </View>
         ) : null}
 
+        {canPublish ? (
+          <View style={[styles.publishBox, { backgroundColor: c.cardAlt }]}>
+            <Pressable
+              accessibilityRole="checkbox"
+              accessibilityState={{ checked: publish }}
+              onPress={() => setPublish((p) => !p)}
+              style={styles.publishRow}>
+              <Ionicons name={publish ? 'checkbox' : 'square-outline'} size={24} color={c.primary} />
+              <View style={{ flex: 1 }}>
+                <Text style={[styles.label, { color: c.text }]}>انشرها في الفيد</Text>
+                <Muted style={{ fontSize: 12 }}>الشيفات التانيين هيشوفوها باسمك وصورتك.</Muted>
+              </View>
+            </Pressable>
+            {publish && !auth ? (
+              <View style={{ gap: space.sm }}>
+                <Muted>سجّل برقم موبايلك علشان تنشر. الوصفة هتتحفظ عندك في الحالتين.</Muted>
+                <Button label="سجّل برقم الموبايل" icon="phone-portrait-outline" variant="secondary" onPress={() => router.push('/account')} />
+              </View>
+            ) : null}
+            {publish && auth && !profile.name
+              ? field('اسمك كشيف *', { value: chefName, onChangeText: setChefName, placeholder: 'مثلاً: الشيف سارة' }, 'هيتحفظ في ملفك الشخصي.')
+              : null}
+          </View>
+        ) : null}
+
         <Button label="حفظ الوصفة" icon="checkmark" onPress={save} loading={saving} disabled={busyImage} />
       </ScrollView>
     </KeyboardAvoidingView>
@@ -217,5 +271,7 @@ const styles = StyleSheet.create({
   multiline: { minHeight: 120, textAlignVertical: 'top' },
   row: { flexDirection: 'row', gap: space.sm, alignItems: 'flex-start' },
   chips: { flexDirection: 'row', flexWrap: 'wrap', gap: space.sm },
+  publishBox: { borderRadius: radius.md, padding: space.md, gap: space.md },
+  publishRow: { flexDirection: 'row', alignItems: 'center', gap: space.md },
   imageHint: { position: 'absolute', bottom: 14, start: 0, end: 0, flexDirection: 'row', justifyContent: 'center', alignItems: 'center', gap: 6 },
 });

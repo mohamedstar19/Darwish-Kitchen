@@ -83,5 +83,41 @@ function migrate(db) {
     version = 3;
   }
 
+  if (version < 4) {
+    // Chefs feed: public author name/photo, published recipes, likes and reports.
+    db.exec(`
+      BEGIN;
+      ALTER TABLE users ADD COLUMN name TEXT;
+      ALTER TABLE users ADD COLUMN avatar TEXT;
+      CREATE TABLE posts (
+        id TEXT PRIMARY KEY,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        client_id TEXT NOT NULL,
+        data TEXT NOT NULL,
+        image TEXT,
+        hidden INTEGER NOT NULL DEFAULT 0,
+        created_at INTEGER NOT NULL,
+        updated_at INTEGER NOT NULL,
+        UNIQUE (user_id, client_id)
+      );
+      CREATE INDEX posts_feed ON posts(hidden, created_at DESC);
+      CREATE TABLE post_likes (
+        post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (post_id, user_id)
+      );
+      CREATE TABLE post_reports (
+        post_id TEXT NOT NULL REFERENCES posts(id) ON DELETE CASCADE,
+        user_id TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+        reason TEXT,
+        created_at INTEGER NOT NULL,
+        PRIMARY KEY (post_id, user_id)
+      );
+      COMMIT;
+    `);
+    version = 4;
+  }
+
   db.exec(`PRAGMA user_version = ${version}`);
 }

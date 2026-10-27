@@ -6,6 +6,7 @@ import { createCatalog } from './catalog.mjs';
 import { openDb } from './db.mjs';
 import { clientIp, HttpError, readBody, readJson, send } from './http.mjs';
 import { createOtp, normalizePhone } from './otp.mjs';
+import { createPosts } from './posts.mjs';
 
 const SESSION_DAYS = 180;
 const MAX_JSON = 10 * 1024 * 1024; // backup JSON
@@ -29,6 +30,7 @@ export function createApp({ dataDir, otp: otpConfig = {}, admins = [], seedFile 
   const db = openDb(dataDir);
   const adminPhones = new Set(admins.map((p) => normalizePhone(p)).filter(Boolean));
   const catalogRoute = createCatalog({ db, dataDir, seedFile });
+  const posts = createPosts({ db, dataDir });
   const imagesRoot = join(dataDir, 'images');
   const otp = createOtp(otpConfig);
   const sendPerIp = createRateLimiter({ limit: 10, windowMs: 15 * 60 * 1000 });
@@ -84,6 +86,17 @@ export function createApp({ dataDir, otp: otpConfig = {}, admins = [], seedFile 
     if (!adminPhones.has(user.phone)) throw new HttpError(403, 'not-admin');
     return user;
   };
+
+  /** The signed-in user, or null for visitors (and for expired logins) on public pages. */
+  const optionalUser = (req) => {
+    if (!req.headers.authorization) return null;
+    try {
+      return requireUser(req);
+    } catch {
+      return null;
+    }
+  };
+  const isAdmin = (user) => adminPhones.has(user.phone);
 
   const userDir = (userId) => join(imagesRoot, userId);
   const imagePath = (userId, name) => {
@@ -159,7 +172,10 @@ export function createApp({ dataDir, otp: otpConfig = {}, admins = [], seedFile 
 
     if (path === '/api/me' && m === 'GET') {
       const { userId, phone } = requireUser(req);
-      return send(res, 200, { user: { id: userId, phone, isAdmin: adminPhones.has(phone) } });
+      const pub = posts.userProfile(userId) ?? {};
+      return send(res, 200, {
+        user: { id: userId, phone, isAdmin: adminPhones.has(phone), name: pub.name ?? null, avatar: pub.avatar ? `/api/avatars/${pub.avatar}` : null },
+      });
     }
 
     if (path === '/api/backup') {
@@ -225,10 +241,12 @@ export function createApp({ dataDir, otp: otpConfig = {}, admins = [], seedFile 
     if (path === '/api/account' && m === 'DELETE') {
       const { userId } = requireUser(req);
       await rm(userDir(userId), { recursive: true, force: true });
+      await posts.deleteUserFiles(userId);
       q.deleteUser.run(userId); // Sessions and backup go with it (ON DELETE CASCADE).
       return send(res, 204);
     }
 
+    if (await posts.route(req, res, path, { requireUser, optionalUser, isAdmin })) return;
     if (await catalogRoute(req, res, path, requireAdmin)) return;
 
     throw new HttpError(404, 'not-found');

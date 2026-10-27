@@ -47,13 +47,18 @@ export type Recipe = {
   notes?: string;
   /** @deprecated Likes now live in the activity store; kept only to migrate old data. */
   favorite?: boolean;
-  source: 'user' | 'web' | 'sample';
+  /** user = written by this user; web = saved from TheMealDB; feed = saved from another chef; sample = legacy starter. */
+  source: 'user' | 'web' | 'sample' | 'feed';
   sourceUrl?: string;
   /** TheMealDB id when the recipe was saved from the internet. */
   webId?: string;
-  /** Starter/catalog recipe the user edited: catalog updates no longer overwrite it. */
+  /** Post id while this recipe is published in the chefs feed. */
+  postId?: string;
+  /** Feed post this recipe was saved from. */
+  feedId?: string;
+  /** Legacy (starters used to live in the user's list): the user edited this starter. */
   customized?: boolean;
-  /** `updatedAt` of the catalog version last applied (catalog recipes only). */
+  /** Legacy: catalog version applied to a starter. */
   catalogVersion?: number;
   createdAt: number;
   updatedAt: number;
@@ -94,7 +99,8 @@ export type Profile = {
 
 /** Points at a saved recipe ("local") or an internet recipe ("web"). */
 export type RecipeRef = {
-  kind: 'local' | 'web';
+  /** local = my recipes, darwish = Darwish catalog, feed = another chef's post, web = TheMealDB. */
+  kind: 'local' | 'web' | 'darwish' | 'feed';
   id: string;
   /** Snapshot for internet recipes so lists can show them offline. */
   title?: string;

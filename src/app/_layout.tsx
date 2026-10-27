@@ -4,6 +4,7 @@ import { useCallback, useEffect, useMemo, useState, type ReactNode } from 'react
 import { I18nManager, Platform, useColorScheme } from 'react-native';
 import { ActivityProvider } from '../lib/activity-context';
 import { AuthProvider } from '../lib/auth-context';
+import { DarwishProvider } from '../lib/darwish-context';
 import { DataGenerationContext } from '../lib/data-reload';
 import { ProfileProvider } from '../lib/profile-context';
 import { RecipesProvider } from '../lib/recipes-context';
@@ -37,6 +38,7 @@ export default function RootLayout() {
     <LocaleProvider direction="rtl">
       <ThemeProvider value={navTheme}>
         <AuthProvider>
+          <DarwishProvider>
           <DataProviders>
             <StatusBar style={scheme === 'dark' ? 'light' : 'dark'} />
             <Stack
@@ -52,10 +54,14 @@ export default function RootLayout() {
               <Stack.Screen name="profile/edit" options={{ title: 'الملف الشخصي', presentation: 'modal' }} />
               <Stack.Screen name="profile/[section]" options={{ title: 'وصفاتي' }} />
               <Stack.Screen name="account" options={{ title: 'الحساب', presentation: 'modal' }} />
+              <Stack.Screen name="darwish/index" options={{ title: 'وصفات درويش' }} />
+              <Stack.Screen name="darwish/[id]" options={{ title: 'من مطبخ درويش' }} />
+              <Stack.Screen name="feed/[id]" options={{ title: 'وصفة شيف' }} />
               <Stack.Screen name="admin/index" options={{ title: 'لوحة التحكم' }} />
               <Stack.Screen name="admin/edit" options={{ title: 'وصفة الكتالوج' }} />
             </Stack>
           </DataProviders>
+          </DarwishProvider>
         </AuthProvider>
       </ThemeProvider>
     </LocaleProvider>

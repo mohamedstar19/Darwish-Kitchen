@@ -6,7 +6,9 @@ import { Button } from '../../components/ui';
 import { notify } from '../../lib/confirm';
 import { goBack } from '../../lib/nav';
 import { pickImage, type ImageSource } from '../../lib/images';
+import { useAuth } from '../../lib/auth-context';
 import { useProfile } from '../../lib/profile-context';
+import { syncChefProfile } from '../../lib/publish';
 import { radius, space, useTheme } from '../../theme';
 
 export default function EditProfileScreen() {
@@ -18,6 +20,7 @@ export default function EditProfileScreen() {
 function ProfileForm() {
   const c = useTheme();
   const { profile, updateProfile } = useProfile();
+  const { auth } = useAuth();
   const [avatar, setAvatar] = useState(profile.avatar);
   const [name, setName] = useState(profile.name);
   const [bio, setBio] = useState(profile.bio ?? '');
@@ -42,7 +45,10 @@ function ProfileForm() {
     if (!name.trim()) return setError('اكتب اسمك.');
     setSaving(true);
     try {
-      await updateProfile({ name: name.trim(), bio: bio.trim() || undefined, phone: phone.trim() || undefined, avatar });
+      const changes = { name: name.trim(), bio: bio.trim() || undefined, phone: phone.trim() || undefined, avatar };
+      await updateProfile(changes);
+      // Name and photo also show on the recipes I published in the feed.
+      if (auth) syncChefProfile({ ...profile, ...changes, updatedAt: Date.now() }).catch(() => {});
       goBack('/profile');
     } catch {
       notify('مقدرناش نحفظ الملف', 'مساحة التخزين ممكن تكون مليانة.');

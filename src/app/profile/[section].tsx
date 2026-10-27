@@ -34,7 +34,12 @@ export default function ProfileSectionScreen() {
             mealTypes={item.mealTypes}
             category={item.category}
             minutes={item.minutes}
-            subtitle={[item.stars ? '★'.repeat(item.stars) : '', item.ref.kind === 'web' ? 'من النت' : ''].filter(Boolean).join('  •  ')}
+            subtitle={[
+              item.stars ? '★'.repeat(item.stars) : '',
+              { web: 'من النت', darwish: 'من مطبخ درويش', feed: 'من الشيفات', local: '' }[item.ref.kind],
+            ]
+              .filter(Boolean)
+              .join('  •  ')}
             onPress={() => openRecipe(item.ref)}
           />
         )}

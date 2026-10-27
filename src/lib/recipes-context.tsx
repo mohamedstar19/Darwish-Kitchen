@@ -1,9 +1,9 @@
 import { createContext, useCallback, useContext, useEffect, useMemo, useRef, useState, type ReactNode } from 'react';
 import type { Recipe, RecipeInput } from '../types';
-import { dismissStarter, fetchCatalog, getDismissed, mergeCatalog } from './catalog';
 import { useDataGeneration } from './data-reload';
 import { newId } from './id';
 import { deleteStoredImage } from './images';
+import { unpublishRecipe } from './publish';
 import { loadRecipes, saveRecipes } from './storage';
 
 type RecipesContextValue = {
@@ -24,22 +24,13 @@ export function RecipesProvider({ children }: { children: ReactNode }) {
   const generation = useDataGeneration();
 
   useEffect(() => {
-    let cancelled = false;
     loadRecipes()
-      .then(async (list) => {
+      .then((list) => {
         latest.current = list;
         setRecipes(list);
-        setReady(true);
-        // Then pull the admin's catalog (new recipes, photos). Offline is fine: keep what we have.
-        const [catalog, dismissed] = await Promise.all([fetchCatalog(), getDismissed()]);
-        const merged = !cancelled && mergeCatalog(latest.current, catalog, dismissed);
-        if (merged) await commit(merged);
       })
       .catch(() => {})
       .finally(() => setReady(true));
-    return () => {
-      cancelled = true;
-    };
   }, [generation]);
 
   // Saves first so a storage error (e.g. full browser storage) reaches the caller.
@@ -62,18 +53,13 @@ export function RecipesProvider({ children }: { children: ReactNode }) {
       },
       updateRecipe: async (id, input) => {
         const old = latest.current.find((r) => r.id === id);
-        // Editing a starter makes it the user's own: catalog updates won't overwrite it.
-        await commit(
-          latest.current.map((r) =>
-            r.id === id ? { ...r, ...input, ...(r.source === 'sample' ? { customized: true } : {}), updatedAt: Date.now() } : r,
-          ),
-        );
+        await commit(latest.current.map((r) => (r.id === id ? { ...r, ...input, updatedAt: Date.now() } : r)));
         if (old?.image && 'image' in input && input.image !== old.image) deleteStoredImage(old.image);
       },
       deleteRecipe: async (id) => {
         const old = latest.current.find((r) => r.id === id);
         await commit(latest.current.filter((r) => r.id !== id));
-        if (old?.source === 'sample') await dismissStarter(id);
+        if (old?.postId) unpublishRecipe(old.postId).catch(() => {}); // also leaves the feed
         deleteStoredImage(old?.image);
       },
     }),

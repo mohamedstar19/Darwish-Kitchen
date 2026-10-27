@@ -11,8 +11,11 @@
 
 | Path | Purpose |
 | --- | --- |
-| `src/app/(tabs)/index.tsx` | Home: meal + source pickers and the "حناكل إيه النهارده؟" button |
-| `src/app/(tabs)/recipes.tsx` | Saved recipes: search, meal/favorite filters, add button |
+| `src/app/(tabs)/index.tsx` | Home: Darwish slider, meal + source pickers, "حناكل إيه النهارده؟", drinks tiles |
+| `src/app/(tabs)/feed.tsx` | "الشيفات": chefs feed (customers' published recipes), filters, like/save |
+| `src/app/feed/[id].tsx` | A chef's recipe: like, save, report, delete (own/admin) |
+| `src/app/darwish/` | "وصفات درويش" list (sections) and detail (like, rate, copy to my recipes) |
+| `src/app/(tabs)/recipes.tsx` | "وصفاتي": only the user's own + saved recipes; search, sections, filters |
 | `src/app/(tabs)/discover.tsx` | Search TheMealDB |
 | `src/app/recipe/[id].tsx` | Saved recipe details, favorite, edit, delete |
 | `src/app/recipe/edit.tsx` | Add / edit form with photo (`?id=` to edit) |
@@ -23,7 +26,10 @@
 | `src/lib/recipes-context.tsx` | Recipe state + persistence |
 | `src/data/starter-recipes.json` | Starter recipes (food, drinks, juices): bundled in the app and seeds the server catalog |
 | `src/data/samples.ts` | Turns the starters into `Recipe`s for first launch / offline |
-| `src/lib/catalog.ts` | Fetch + merge the admin catalog into the device's recipes |
+| `src/lib/catalog.ts` | Darwish catalog types + fetch |
+| `src/lib/darwish-context.tsx` | Darwish recipes: cached copy, bundled fallback, refresh from server |
+| `src/lib/feed-api.ts`, `src/lib/feed-actions.ts`, `src/lib/publish.ts` | Feed client, like/save helpers, publishing (chef name/photo, recipe, photo) |
+| `server/src/posts.mjs` | Feed API: posts, likes, reports, chef profile, moderation |
 | `src/app/admin/` | Control panel (admins only): catalog list, add/edit with photos, hide, delete |
 | `server/src/catalog.mjs` | Catalog API + photos |
 | `src/app/(tabs)/profile.tsx` | Profile: info, stats, recently viewed, account/backup card |
@@ -40,8 +46,8 @@
 
 - `Recipe.category` is `food` | `healthy-drink` | `juice`; missing means `food` (older data). Use `categoryOf()`.
 - Drinks and juices don't need meal types; the add/edit form hides the meal picker for them.
-- "وصفاتي" has section tabs (الكل / أكل / مشروبات صحية / عصائر); meal filters show only in أكل. `/recipes?section=juice` opens a section (used by the home tiles).
-- Starter drinks/juices live in `DRINK_SAMPLES`. `SAMPLES_VERSION` (stored under `darwish-kitchen.samples-version`) adds new starters once for existing users; a starter the user deleted later doesn't come back.
+- "وصفاتي" and "وصفات درويش" have section tabs (الكل / أكل / مشروبات صحية / عصائر); meal filters show only in أكل. `/darwish?section=juice` opens a section (used by the home tiles).
+- Drinks and juices for everyone are in the Darwish catalog (home tiles open its sections); users add their own in وصفاتي.
 - "حناكل إيه النهارده؟" only suggests food.
 
 ## Suggestions
@@ -58,13 +64,26 @@
 - "ضفتها" = saved recipes whose `source` isn't `sample` (includes internet recipes the user saved).
 - Old `Recipe.favorite` flags are migrated to likes the first time the activity store loads.
 
+## App structure
+
+- Tabs: **الرئيسية** (slider + suggestions) · **الشيفات** (feed) · **وصفاتي** · **من النت** · **حسابي**.
+- **وصفاتي** holds only the user's recipes: ones they wrote (`source: user`), saved from the feed (`feed`, `feedId`) or the internet (`web`). New users start empty.
+- **وصفات درويش** is the admin catalog, kept separately (`DarwishProvider`, cached in `darwish-kitchen.darwish-cache.v1`, bundled `starter-recipes.json` as offline fallback). Likes/ratings/views use ref kind `darwish`. "خد نسخة وعدّلها" copies one into وصفاتي.
+- Suggestions ("من التطبيق") pick from my food recipes + Darwish food; "الاتنين" also mixes in TheMealDB.
+- Data version 3 (`storage.ts`, `migrated()`): untouched starters leave وصفاتي, edited ones become `user` recipes, and activity refs on removed starters become `darwish`. Every loader awaits the same migration.
+
+## Chefs feed
+
+- Add/edit form has "انشرها في الفيد" (on by default) for the user's own recipes. Publishing needs a login and a chef name (asked inline the first time, saved in the profile). It sends the chef name/photo, then `POST /api/posts {clientId: recipe.id, recipe}` (same clientId updates the same post), then the photo if it changed. The post id is kept in `recipe.postId`. Turning it off, or deleting the recipe, removes the post. If the network fails, the recipe is still saved locally and the user is told to save again.
+- Posts are public right away. Anyone signed in can like (count + likedByMe), save a copy, and report (not their own). Admins see reported/hidden/all in the control panel ("وصفات الشيفات"), and can hide/show or delete.
+- Server: `posts`, `post_likes`, `post_reports` tables (DB v4) plus `users.name/avatar`. Photos in `DATA_DIR/post-images` and `DATA_DIR/avatars`, served publicly with immutable caching. Limits: 30 new posts/day, 50 reports/day per user. Deleting an account deletes the chef's posts, likes, reports and photos.
+
 ## Catalog and control panel
 
-- The server keeps a **catalog** of starter recipes everyone gets. First start seeds it from `starter-recipes.json` (once; deleting them later doesn't re-seed).
-- Admins are phone numbers in `ADMIN_PHONES` (`/opt/darwish-kitchen/otp.env`, or `ADMIN_PHONES=01… bash deploy/update.sh <server>`). `GET /api/me` and login return `isAdmin`; every `/api/admin/*` route checks it server-side.
-- Control panel: `/admin` in the app (web: `https://kitchen.darwish-tech.com/admin`, or "حسابي" → لوحة التحكم). Add/edit recipes, upload/replace/remove a photo, hide (unpublish), delete. Filter "من غير صورة" shows what still needs a photo.
-- Photos: `DATA_DIR/catalog-images/<id>-<random>.jpg`, served publicly from `/api/catalog/images/…` with a 1-year immutable cache (a new upload gets a new name).
-- App sync (`mergeCatalog`), on every app start: adds new catalog recipes; updates starters the user never edited (`customized`) when `updatedAt` changes; removes starters the admin deleted/hid unless edited; never re-adds starters the user deleted (`darwish-kitchen.catalog-dismissed`); ignores an empty response. Catalog photos are remote URLs, so they need internet the first time.
+- The server keeps the **Darwish catalog**. First start seeds it from `starter-recipes.json` (once; deleting them later doesn't re-seed).
+- Admins are phone numbers in `ADMIN_PHONES` (`/opt/darwish-kitchen/otp.env`, or `ADMIN_PHONES=01… bash deploy/update.sh <server>`). `GET /api/me` and login return `isAdmin`; every admin route checks it server-side.
+- Control panel `/admin` ("حسابي" → لوحة التحكم): **وصفات درويش** (add/edit, photo upload/replace/remove, hide, delete, "من غير صورة" filter) and **وصفات الشيفات** (moderation).
+- Catalog photos: `DATA_DIR/catalog-images/<id>-<random>.jpg`, public, immutable cache (a new upload gets a new name).
 
 ## Backup server (`server/`)
 

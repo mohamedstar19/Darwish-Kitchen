@@ -4,8 +4,8 @@ import starters from './starter-recipes.json';
 const t = Date.UTC(2026, 0, 1);
 
 /**
- * Starter recipes bundled with the app (food, healthy drinks, juices) so it works offline on first launch.
- * The same file seeds the server catalog, where the admin can edit them and add photos; the app then syncs them.
+ * Darwish recipes bundled with the app (food, healthy drinks, juices): shown in "وصفات درويش" until the
+ * server catalog loads (e.g. first launch offline). The same file seeds the server catalog.
  */
 export const SAMPLE_RECIPES: Recipe[] = starters.map((s) => ({
   ...s,
@@ -15,9 +15,3 @@ export const SAMPLE_RECIPES: Recipe[] = starters.map((s) => ({
   createdAt: t,
   updatedAt: t,
 }));
-
-/** Starter healthy drinks and juices (added in samples version 2). */
-export const DRINK_SAMPLES: Recipe[] = SAMPLE_RECIPES.filter((r) => r.category !== 'food');
-
-/** Bump when new starter recipes are added, so existing users get them once. */
-export const SAMPLES_VERSION = 2;

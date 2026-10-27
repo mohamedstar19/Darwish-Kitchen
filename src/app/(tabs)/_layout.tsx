@@ -20,7 +20,7 @@ export default function TabsLayout() {
           paddingBottom: insets.bottom + 6,
         },
         tabBarItemStyle: { height: 56, paddingVertical: 2 },
-        tabBarLabelStyle: { fontSize: 12, fontWeight: '700' },
+        tabBarLabelStyle: { fontSize: 11, fontWeight: '700' },
         headerStyle: { backgroundColor: c.background },
         headerTitleStyle: { fontWeight: '800', color: c.text },
         headerShadowVisible: false,
@@ -29,9 +29,17 @@ export default function TabsLayout() {
       <Tabs.Screen
         name="index"
         options={{
-          title: 'اقتراح اليوم',
+          title: 'الرئيسية',
           headerShown: false,
-          tabBarIcon: ({ color, size }) => <Ionicons name="sparkles" color={String(color)} size={size} />,
+          tabBarIcon: ({ color, size }) => <Ionicons name="home" color={String(color)} size={size} />,
+        }}
+      />
+      <Tabs.Screen
+        name="feed"
+        options={{
+          title: 'الشيفات',
+          headerShown: false,
+          tabBarIcon: ({ color, size }) => <Ionicons name="people" color={String(color)} size={size} />,
         }}
       />
       <Tabs.Screen
