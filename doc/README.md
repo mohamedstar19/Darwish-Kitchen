@@ -129,7 +129,7 @@
 
 ## Web deploy
 
-`deploy/update.sh` builds the web app with `WEB_BASE_URL=""` (served at the domain root) and installs it to `/opt/darwish-kitchen/web` on the server. `scripts/postexport-web.mjs` prefixes the PWA links and adds `404.html`. GitHub Actions (`.github/workflows/ci.yml`) only checks: typecheck, web build, server tests.
+`deploy/update.sh` builds the web app with `WEB_BASE_URL=""` (served at the domain root) and installs it to `/opt/darwish-kitchen/web` on the server. `scripts/postexport-web.mjs` prefixes the PWA links, adds `?v=<content hash>` to the icon/manifest/favicon links and to the icons inside `manifest.json` (so icon changes bypass browser and Cloudflare caches), and adds `404.html`. The manifest has a fixed `"id": "/"` so installed apps keep their identity when the manifest URL changes. GitHub Actions (`.github/workflows/ci.yml`) only checks: typecheck, web build, server tests.
 
 ## Icons
 
