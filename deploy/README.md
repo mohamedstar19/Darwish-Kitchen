@@ -36,6 +36,14 @@ sudo nano /opt/darwish-kitchen/otp.env
 sudo -u kitchen pm2 restart kitchen
 ```
 
+## الأدمن (لوحة التحكم)
+
+علشان رقمك يبقى أدمن ويفتح لوحة التحكم (إضافة صور ووصفات للكل)، انشر مرة بالأمر ده:
+```bash
+ADMIN_PHONES=01xxxxxxxxx bash deploy/update.sh mk@192.168.1.116
+```
+أكتر من أدمن: افصل بينهم بفاصلة `ADMIN_PHONES=01xxxxxxxxx,01yyyyyyyyy`. بعدها افتح `https://kitchen.darwish-tech.com/admin` وسجّل برقمك.
+
 ## مرة واحدة في Cloudflare
 
 ضيف **kitchen.darwish-tech.com** بنفس طريقة `quran.darwish-tech.com`:

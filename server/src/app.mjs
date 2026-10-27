@@ -2,7 +2,9 @@ import { randomUUID } from 'node:crypto';
 import { mkdir, readdir, readFile, rm, stat, writeFile } from 'node:fs/promises';
 import { join } from 'node:path';
 import { createRateLimiter, hashToken, newToken } from './auth.mjs';
+import { createCatalog } from './catalog.mjs';
 import { openDb } from './db.mjs';
+import { clientIp, HttpError, readBody, readJson, send } from './http.mjs';
 import { createOtp, normalizePhone } from './otp.mjs';
 
 const SESSION_DAYS = 180;
@@ -11,55 +13,6 @@ const MAX_IMAGE = 5 * 1024 * 1024;
 const MAX_IMAGES_PER_USER = 2000;
 const IMAGE_NAME = /^[A-Za-z0-9_-][A-Za-z0-9._-]{0,99}\.jpg$/;
 const MAX_CODE_ATTEMPTS = 5;
-
-class HttpError extends Error {
-  constructor(status, code) {
-    super(code);
-    this.status = status;
-    this.code = code;
-  }
-}
-
-function send(res, status, body, headers = {}) {
-  const isJson = body !== undefined && !Buffer.isBuffer(body);
-  res.writeHead(status, {
-    ...(isJson ? { 'Content-Type': 'application/json; charset=utf-8' } : {}),
-    'Cache-Control': 'no-store',
-    'X-Content-Type-Options': 'nosniff',
-    ...headers,
-  });
-  res.end(body === undefined ? undefined : isJson ? JSON.stringify(body) : body);
-}
-
-async function readBody(req, max) {
-  const declared = Number(req.headers['content-length'] ?? 0);
-  if (declared > max) throw new HttpError(413, 'too-large');
-  const chunks = [];
-  let size = 0;
-  for await (const chunk of req) {
-    size += chunk.length;
-    if (size > max) throw new HttpError(413, 'too-large');
-    chunks.push(chunk);
-  }
-  return Buffer.concat(chunks);
-}
-
-async function readJson(req, max = 64 * 1024) {
-  if (!String(req.headers['content-type'] ?? '').includes('application/json')) throw new HttpError(415, 'json-required');
-  try {
-    return JSON.parse((await readBody(req, max)).toString('utf8'));
-  } catch (e) {
-    if (e instanceof HttpError) throw e;
-    throw new HttpError(400, 'bad-json');
-  }
-}
-
-function clientIp(req) {
-  const local = ['127.0.0.1', '::1', '::ffff:127.0.0.1'].includes(req.socket.remoteAddress ?? '');
-  // Only trust proxy headers when the request came through the local nginx.
-  if (local) return String(req.headers['cf-connecting-ip'] ?? req.headers['x-real-ip'] ?? req.socket.remoteAddress);
-  return req.socket.remoteAddress ?? 'unknown';
-}
 
 function phoneFrom(body) {
   const phone = normalizePhone(body?.phone);
@@ -70,9 +23,12 @@ function phoneFrom(body) {
 /**
  * Builds the request handler. `dataDir` holds the SQLite file and users' photos.
  * `otp` configures login codes (see otp.mjs): { url, token } for Darwish OTP, or { devCodes, onDevCode } for tests.
+ * `admins`: phone numbers allowed into the control panel. `seedFile`: starter recipes for a new catalog.
  */
-export function createApp({ dataDir, otp: otpConfig = {} }) {
+export function createApp({ dataDir, otp: otpConfig = {}, admins = [], seedFile }) {
   const db = openDb(dataDir);
+  const adminPhones = new Set(admins.map((p) => normalizePhone(p)).filter(Boolean));
+  const catalogRoute = createCatalog({ db, dataDir, seedFile });
   const imagesRoot = join(dataDir, 'images');
   const otp = createOtp(otpConfig);
   const sendPerIp = createRateLimiter({ limit: 10, windowMs: 15 * 60 * 1000 });
@@ -111,7 +67,7 @@ export function createApp({ dataDir, otp: otpConfig = {} }) {
       q.deleteExpired.run(now);
       q.deleteExpiredOtp.run(now);
     }
-    return { token, user: { id: userId, phone } };
+    return { token, user: { id: userId, phone, isAdmin: adminPhones.has(phone) } };
   };
 
   const requireUser = (req) => {
@@ -121,6 +77,12 @@ export function createApp({ dataDir, otp: otpConfig = {} }) {
     // Old email-only accounts (no phone) must sign in again with a phone number.
     if (!row || row.expiresAt < Date.now() || !row.phone) throw new HttpError(401, 'signed-out');
     return { userId: row.userId, phone: row.phone, tokenHash: hashToken(match[1]) };
+  };
+
+  const requireAdmin = (req) => {
+    const user = requireUser(req);
+    if (!adminPhones.has(user.phone)) throw new HttpError(403, 'not-admin');
+    return user;
   };
 
   const userDir = (userId) => join(imagesRoot, userId);
@@ -197,7 +159,7 @@ export function createApp({ dataDir, otp: otpConfig = {} }) {
 
     if (path === '/api/me' && m === 'GET') {
       const { userId, phone } = requireUser(req);
-      return send(res, 200, { user: { id: userId, phone } });
+      return send(res, 200, { user: { id: userId, phone, isAdmin: adminPhones.has(phone) } });
     }
 
     if (path === '/api/backup') {
@@ -266,6 +228,8 @@ export function createApp({ dataDir, otp: otpConfig = {} }) {
       q.deleteUser.run(userId); // Sessions and backup go with it (ON DELETE CASCADE).
       return send(res, 204);
     }
+
+    if (await catalogRoute(req, res, path, requireAdmin)) return;
 
     throw new HttpError(404, 'not-found');
   }

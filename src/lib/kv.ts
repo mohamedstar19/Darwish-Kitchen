@@ -8,6 +8,7 @@ export const KEYS = {
   backupMeta: 'darwish-kitchen.backup-meta.v1',
   auth: 'darwish-kitchen.auth.v1',
   samplesVersion: 'darwish-kitchen.samples-version',
+  catalogDismissed: 'darwish-kitchen.catalog-dismissed',
 } as const;
 
 export async function readJson<T>(key: string): Promise<T | null> {

@@ -8,6 +8,7 @@ import { getBackupMeta, getServerBackupDate, restoreBackup } from '../lib/backup
 import { confirm, notify } from '../lib/confirm';
 import { useReloadData } from '../lib/data-reload';
 import { formatDateTime } from '../lib/format';
+import { goBack } from '../lib/nav';
 import { useProfile } from '../lib/profile-context';
 import { radius, space, useTheme } from '../theme';
 
@@ -89,7 +90,7 @@ export default function AccountScreen() {
       const restored = await offerRestore();
       // Fill the profile's phone the first time, unless a restore just brought one.
       if (!restored && !profile.phone) await updateProfile({ phone: displayPhone(auth.phone) }).catch(() => {});
-      router.back();
+      goBack('/profile');
     } catch (e) {
       setError(errorMessage(e));
     } finally {

@@ -1,193 +1,23 @@
-import type { Recipe } from '../types';
+import type { MealType, Recipe, RecipeCategory } from '../types';
+import starters from './starter-recipes.json';
 
 const t = Date.UTC(2026, 0, 1);
 
-/** Starter food recipes shown on first launch. Users can edit or delete them. */
-const FOOD_SAMPLES: Recipe[] = [
-  {
-    id: 'sample-foul',
-    title: 'فول مدمس بالزيت والليمون',
-    category: 'food',
-    mealTypes: ['breakfast', 'dinner'],
-    ingredients: ['علبة فول مدمس', 'فص ثوم مهروس', 'عصير نص ليمونة', '٢ معلقة زيت زيتون', 'كمون وملح', 'طماطم وبقدونس للتزيين'],
-    steps: ['سخّن الفول مع شوية من ميته على نار هادية.', 'اهرس الفول بالمهراسة حسب القوام اللي تحبه.', 'ضيف الثوم والكمون والملح وعصير الليمون وقلّب.', 'اغرف في طبق وزيّن بزيت الزيتون والطماطم والبقدونس.'],
-    prepMinutes: 10,
-    servings: 3,
-    source: 'sample',
-    createdAt: t,
-    updatedAt: t,
-  },
-  {
-    id: 'sample-shakshuka',
-    title: 'شكشوكة بالطماطم',
-    category: 'food',
-    mealTypes: ['breakfast', 'dinner'],
-    ingredients: ['٤ بيضات', '٣ طماطم مفرومة', 'بصلة صغيرة مفرومة', 'فلفل رومي', 'معلقة زبدة أو زيت', 'ملح وفلفل وكمون'],
-    steps: ['شوّح البصل والفلفل في الزبدة لحد ما يدبلوا.', 'ضيف الطماطم والتوابل وسيبها تتسبك ٥ دقايق.', 'اعمل حفر صغيرة واكسر فيها البيض.', 'غطّي الطاسة لحد ما البيض يستوي على مزاجك.'],
-    prepMinutes: 15,
-    servings: 2,
-    source: 'sample',
-    createdAt: t,
-    updatedAt: t,
-  },
-  {
-    id: 'sample-molokhia',
-    title: 'ملوخية بالفراخ',
-    category: 'food',
-    mealTypes: ['lunch'],
-    ingredients: ['نص كيلو ملوخية مفرومة', '٤ كوب شوربة فراخ', 'فراخ مسلوقة ومحمّرة', '٦ فصوص ثوم', 'معلقة كزبرة ناشفة', 'معلقة سمنة', 'ملح'],
-    steps: ['سخّن الشوربة لحد ما تغلي وضيف الملوخية وقلّب.', 'سيبها على نار هادية من غير غطا لحد ما تغلي تاني.', 'في طاسة حمّر الثوم مع الكزبرة في السمنة (الطشة).', 'ضيف الطشة على الملوخية وقدّمها مع الفراخ والرز.'],
-    prepMinutes: 45,
-    servings: 4,
-    source: 'sample',
-    createdAt: t,
-    updatedAt: t,
-  },
-  {
-    id: 'sample-koshari',
-    title: 'كشري مصري',
-    category: 'food',
-    mealTypes: ['lunch', 'dinner'],
-    ingredients: ['كوب رز', 'كوب عدس بجبة', 'كوب مكرونة صغيرة', 'كوب حمص مسلوق', 'بصل مقرمش', 'صلصة طماطم بالخل والثوم', 'دقة (خل وثوم وكمون)'],
-    steps: ['اسلق العدس لحد ما يستوي نص سوى.', 'ضيف الرز للعدس مع مية وملح وسيبهم يستووا.', 'اسلق المكرونة لوحدها.', 'رتّب الرز بالعدس ثم المكرونة والحمص، وفوقهم الصلصة والدقة والبصل المقرمش.'],
-    prepMinutes: 60,
-    servings: 4,
-    source: 'sample',
-    createdAt: t,
-    updatedAt: t,
-  },
-  {
-    id: 'sample-bechamel',
-    title: 'مكرونة بشاميل',
-    category: 'food',
-    mealTypes: ['lunch'],
-    ingredients: ['نص كيلو مكرونة قلم', 'نص كيلو لحمة مفرومة', 'بصلة مفرومة', 'للبشاميل: ٤ معالق زبدة و٤ معالق دقيق و٤ كوب لبن', 'ملح وفلفل وجوزة الطيب'],
-    steps: ['اسلق المكرونة نص سوى وصفّيها.', 'شوّح البصل وضيف اللحمة لحد ما تستوي وتبّلها.', 'اعمل البشاميل: سيّح الزبدة وقلّب الدقيق ثم ضيف اللبن تدريجيًا مع التقليب لحد ما يتقل.', 'في صينية: طبقة مكرونة ثم لحمة ثم مكرونة، وغطّي بالبشاميل.', 'ادخلها فرن ٢٠٠ درجة لحد ما الوش يحمّر.'],
-    prepMinutes: 75,
-    servings: 6,
-    source: 'sample',
-    createdAt: t,
-    updatedAt: t,
-  },
-  {
-    id: 'sample-eggah',
-    title: 'عجة بالبقدونس',
-    category: 'food',
-    mealTypes: ['breakfast', 'dinner'],
-    ingredients: ['٤ بيضات', 'نص كوب بقدونس مفروم', 'بصلة صغيرة مبشورة', 'معلقة دقيق', 'ملح وفلفل', 'زيت للتحمير'],
-    steps: ['اخفق البيض مع كل المكونات.', 'سخّن الزيت في طاسة وصبّ الخليط.', 'سيبها تستوي من تحت ثم اقلبها للناحية التانية.'],
-    prepMinutes: 15,
-    servings: 2,
-    source: 'sample',
-    createdAt: t,
-    updatedAt: t,
-  },
-];
-
-const drink = (r: Omit<Recipe, 'source' | 'createdAt' | 'updatedAt' | 'mealTypes'>): Recipe => ({
-  ...r,
-  mealTypes: [],
+/**
+ * Starter recipes bundled with the app (food, healthy drinks, juices) so it works offline on first launch.
+ * The same file seeds the server catalog, where the admin can edit them and add photos; the app then syncs them.
+ */
+export const SAMPLE_RECIPES: Recipe[] = starters.map((s) => ({
+  ...s,
+  category: s.category as RecipeCategory,
+  mealTypes: s.mealTypes as MealType[],
   source: 'sample',
   createdAt: t,
   updatedAt: t,
-});
+}));
 
 /** Starter healthy drinks and juices (added in samples version 2). */
-export const DRINK_SAMPLES: Recipe[] = [
-  drink({
-    id: 'sample-drink-anise',
-    category: 'healthy-drink',
-    title: 'ينسون بالعسل',
-    ingredients: ['معلقة ينسون حب', 'كوب ونص مية', 'معلقة صغيرة عسل نحل'],
-    steps: ['اغلي المية وضيف عليها الينسون.', 'سيبه يغلي دقيقتين وبعدين غطّيه ٥ دقايق.', 'صفّيه وحلّيه بالعسل.'],
-    prepMinutes: 10,
-    servings: 1,
-  }),
-  drink({
-    id: 'sample-drink-hibiscus',
-    category: 'healthy-drink',
-    title: 'كركديه',
-    ingredients: ['نص كوب كركديه ناشف', '٤ كوب مية', 'سكر أو عسل حسب الرغبة'],
-    steps: ['اغسل الكركديه كويس.', 'انقعه في المية الساقعة ٤ ساعات على الأقل أو اغليه ٥ دقايق.', 'صفّيه وحلّيه.', 'يتشرب ساقع بالتلج أو سخن.'],
-    prepMinutes: 15,
-    servings: 4,
-  }),
-  drink({
-    id: 'sample-drink-green-tea',
-    category: 'healthy-drink',
-    title: 'شاي أخضر بالنعناع',
-    ingredients: ['معلقة صغيرة شاي أخضر', 'عود نعناع فريش', 'كوب مية سخنة (مش بتغلي)', 'شريحة ليمون'],
-    steps: ['حط الشاي الأخضر والنعناع في الكوباية.', 'صبّ المية السخنة وسيبه ٣ دقايق.', 'صفّيه وضيف شريحة الليمون.'],
-    prepMinutes: 5,
-    servings: 1,
-  }),
-  drink({
-    id: 'sample-drink-ginger',
-    category: 'healthy-drink',
-    title: 'جنزبيل بالقرفة والليمون',
-    ingredients: ['حتة جنزبيل فريش قد الصباع (مقطّعة شرايح)', 'عود قرفة', 'كوب ونص مية', 'عصير نص ليمونة', 'معلقة عسل'],
-    steps: ['اغلي المية مع الجنزبيل والقرفة ٥ دقايق.', 'شيله من على النار وسيبه يرتاح دقيقتين.', 'صفّيه وضيف الليمون والعسل.'],
-    prepMinutes: 10,
-    servings: 1,
-  }),
-  drink({
-    id: 'sample-drink-banana-oat',
-    category: 'healthy-drink',
-    title: 'سموزي موز بالشوفان',
-    ingredients: ['موزة', '٢ معلقة شوفان', 'كوب لبن', 'معلقة عسل', 'رشة قرفة'],
-    steps: ['حط كل المكونات في الخلاط.', 'اخلطهم لحد ما يبقوا ناعمين.', 'يتشرب على طول.'],
-    prepMinutes: 5,
-    servings: 1,
-  }),
-  drink({
-    id: 'sample-juice-orange',
-    category: 'juice',
-    title: 'عصير برتقال فريش',
-    ingredients: ['٤ برتقالات', 'تلج'],
-    steps: ['اغسل البرتقال واقسمه نصين.', 'اعصره بالعصّارة.', 'قدّمه على التلج على طول.'],
-    prepMinutes: 5,
-    servings: 2,
-  }),
-  drink({
-    id: 'sample-juice-lemon-mint',
-    category: 'juice',
-    title: 'ليمون بالنعناع',
-    ingredients: ['٣ ليمونات', 'حزمة نعناع صغيرة', '٣ معالق سكر', '٢ كوب مية ساقعة', 'تلج'],
-    steps: ['اعصر الليمون.', 'حط العصير مع النعناع والسكر والمية والتلج في الخلاط.', 'اخلطهم وصفّي لو تحب.'],
-    prepMinutes: 5,
-    servings: 2,
-  }),
-  drink({
-    id: 'sample-juice-mango',
-    category: 'juice',
-    title: 'عصير مانجو',
-    ingredients: ['٢ مانجاية مقشّرة ومقطّعة', 'كوب مية ساقعة أو لبن', 'معلقة سكر (اختياري)', 'تلج'],
-    steps: ['حط المانجو مع المية أو اللبن في الخلاط.', 'ضيف السكر والتلج.', 'اخلطهم لحد ما العصير يبقى ناعم.'],
-    prepMinutes: 5,
-    servings: 2,
-  }),
-  drink({
-    id: 'sample-juice-strawberry-milk',
-    category: 'juice',
-    title: 'فراولة باللبن',
-    ingredients: ['كوب فراولة مغسولة', '٢ كوب لبن ساقع', '٢ معلقة سكر', 'تلج'],
-    steps: ['شيل أوراق الفراولة.', 'اخلط الفراولة مع اللبن والسكر والتلج.', 'قدّمه على طول.'],
-    prepMinutes: 5,
-    servings: 2,
-  }),
-  drink({
-    id: 'sample-juice-guava',
-    category: 'juice',
-    title: 'جوافة باللبن',
-    ingredients: ['٣ جوافات', '٢ كوب لبن ساقع', '٢ معلقة سكر', 'تلج'],
-    steps: ['اغسل الجوافة وقطّعها.', 'اخلطها مع اللبن والسكر.', 'صفّيها من البذر وقدّمها بالتلج.'],
-    prepMinutes: 10,
-    servings: 2,
-  }),
-];
-
-/** Everything shown on first launch. */
-export const SAMPLE_RECIPES: Recipe[] = [...FOOD_SAMPLES, ...DRINK_SAMPLES];
+export const DRINK_SAMPLES: Recipe[] = SAMPLE_RECIPES.filter((r) => r.category !== 'food');
 
 /** Bump when new starter recipes are added, so existing users get them once. */
 export const SAMPLES_VERSION = 2;

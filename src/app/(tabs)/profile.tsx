@@ -6,6 +6,7 @@ import { Avatar } from '../../components/Avatar';
 import { BackupCard } from '../../components/BackupCard';
 import { Button, Card, Muted, RecipeImage, type IconName } from '../../components/ui';
 import { openRecipe } from '../../lib/open-recipe';
+import { useAuth } from '../../lib/auth-context';
 import { useProfile } from '../../lib/profile-context';
 import { SECTION_TITLES, useProfileSections, type ProfileSection } from '../../lib/profile-lists';
 import { radius, space, useTheme } from '../../theme';
@@ -21,6 +22,7 @@ export default function ProfileScreen() {
   const c = useTheme();
   const insets = useSafeAreaInsets();
   const { profile } = useProfile();
+  const { auth } = useAuth();
   const sections = useProfileSections();
   const recent = sections.viewed.slice(0, 10);
 
@@ -71,6 +73,10 @@ export default function ProfileScreen() {
             ))}
           </ScrollView>
         </View>
+      ) : null}
+
+      {auth?.isAdmin ? (
+        <Button label="لوحة التحكم (صور ووصفات للكل)" icon="construct-outline" onPress={() => router.push('/admin')} />
       ) : null}
 
       <BackupCard />

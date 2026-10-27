@@ -3,7 +3,7 @@ import { KEYS, readJson, writeJson } from './kv';
 /** Backup server (see `server/`). Override with EXPO_PUBLIC_API_URL, e.g. for local testing. */
 export const API_URL = (process.env.EXPO_PUBLIC_API_URL ?? 'https://kitchen.darwish-tech.com').replace(/\/$/, '');
 
-export type Auth = { token: string; phone: string; userId: string };
+export type Auth = { token: string; phone: string; userId: string; isAdmin?: boolean };
 
 export class ApiError extends Error {
   constructor(
@@ -73,3 +73,6 @@ export async function authHeader(): Promise<Record<string, string>> {
 export function displayPhone(phone: string): string {
   return /^20\d{10}$/.test(phone) ? `0${phone.slice(2)}` : `+${phone}`;
 }
+
+/** Full URL for a server path such as `/api/catalog/images/x.jpg`. */
+export const serverUrl = (path: string) => API_URL + path;

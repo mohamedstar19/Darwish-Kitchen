@@ -52,6 +52,12 @@ if [[ ! -f "$OTP_ENV" ]]; then
     echo "OTP_TOKEN=$(read_quran WHATSAPP_OTP_TOKEN)"
   } > "$OTP_ENV"
 fi
+grep -q '^ADMIN_PHONES=' "$OTP_ENV" || printf '\n# Control-panel admins (phone numbers, comma-separated)\nADMIN_PHONES=\n' >> "$OTP_ENV"
+# deploy/update.sh can pass ADMIN_PHONES=01001234567,... to set the admins.
+if [[ -n "${ADMIN_PHONES:-}" ]]; then
+  [[ "$ADMIN_PHONES" =~ ^[0-9+,\ ]+$ ]] || { echo "bad ADMIN_PHONES" >&2; exit 1; }
+  sed -i "s/^ADMIN_PHONES=.*/ADMIN_PHONES=${ADMIN_PHONES// /}/" "$OTP_ENV"
+fi
 chown "$APP_USER:$APP_USER" "$OTP_ENV" && chmod 600 "$OTP_ENV"
 
 log "3/6 backup API"
@@ -112,6 +118,9 @@ for _ in 1 2 3 4 5; do
   HEALTH="$(curl -fsS "http://127.0.0.1:$PORT/api/health" 2>/dev/null || true)"
   if grep -q '"ok":true' <<<"$HEALTH"; then
     echo -e "\n\033[1;32m✅ Darwish Kitchen is running.\033[0m API: 127.0.0.1:$PORT · web: $APP_HOME/web"
+    if ! grep -q '^ADMIN_PHONES=.' "$OTP_ENV"; then
+      echo -e "\033[1;33mℹ️  No control-panel admin yet. Re-run with: ADMIN_PHONES=<your phone> bash deploy/update.sh <server>\033[0m"
+    fi
     if ! grep -q '"otp":true' <<<"$HEALTH"; then
       echo -e "\033[1;33m⚠️  Login codes are not set up yet. Put the Darwish OTP URL and token (Quran admin → Settings) in:\033[0m"
       echo "     sudo nano $OTP_ENV"

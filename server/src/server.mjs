@@ -1,5 +1,6 @@
 import { existsSync } from 'node:fs';
 import { createServer } from 'node:http';
+import { fileURLToPath } from 'node:url';
 import { createApp } from './app.mjs';
 
 // Secrets (OTP_URL, OTP_TOKEN) live in a root-managed file, not in PM2's saved process list.
@@ -10,8 +11,17 @@ const port = Number(process.env.PORT ?? 3020);
 const host = process.env.HOST ?? '127.0.0.1';
 const dataDir = process.env.DATA_DIR ?? '/opt/darwish-kitchen/data';
 
+// Starter recipes: shipped next to the server on deploy, or read from the app source in development.
+const seedFile = [process.env.SEED_FILE, '../seed/starter-recipes.json', '../../src/data/starter-recipes.json']
+  .filter(Boolean)
+  .map((p) => (p.startsWith('/') ? p : fileURLToPath(new URL(p, import.meta.url))))
+  .find((p) => existsSync(p));
+
 const app = createApp({
   dataDir,
+  seedFile,
+  // Control-panel admins, e.g. ADMIN_PHONES=01001234567,01112223334
+  admins: (process.env.ADMIN_PHONES ?? '').split(/[\s,]+/).filter(Boolean),
   otp: {
     url: process.env.OTP_URL || undefined,
     token: process.env.OTP_TOKEN || undefined,

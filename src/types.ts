@@ -51,6 +51,10 @@ export type Recipe = {
   sourceUrl?: string;
   /** TheMealDB id when the recipe was saved from the internet. */
   webId?: string;
+  /** Starter/catalog recipe the user edited: catalog updates no longer overwrite it. */
+  customized?: boolean;
+  /** `updatedAt` of the catalog version last applied (catalog recipes only). */
+  catalogVersion?: number;
   createdAt: number;
   updatedAt: number;
 };

@@ -52,6 +52,8 @@ export default function RootLayout() {
               <Stack.Screen name="profile/edit" options={{ title: 'الملف الشخصي', presentation: 'modal' }} />
               <Stack.Screen name="profile/[section]" options={{ title: 'وصفاتي' }} />
               <Stack.Screen name="account" options={{ title: 'الحساب', presentation: 'modal' }} />
+              <Stack.Screen name="admin/index" options={{ title: 'لوحة التحكم' }} />
+              <Stack.Screen name="admin/edit" options={{ title: 'وصفة الكتالوج' }} />
             </Stack>
           </DataProviders>
         </AuthProvider>

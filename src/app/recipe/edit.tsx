@@ -4,6 +4,7 @@ import { useState } from 'react';
 import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollView, StyleSheet, Text, TextInput, View, type TextInputProps } from 'react-native';
 import { Button, Chip, Muted, RecipeImage } from '../../components/ui';
 import { notify } from '../../lib/confirm';
+import { goBack } from '../../lib/nav';
 import { pickRecipeImage, type ImageSource } from '../../lib/images';
 import { useRecipes } from '../../lib/recipes-context';
 import { radius, space, useTheme } from '../../theme';
@@ -90,7 +91,7 @@ function RecipeForm({ id, initialCategory }: { id?: string; initialCategory: Rec
     try {
       if (existing) {
         await updateRecipe(existing.id, input);
-        router.back();
+        goBack({ pathname: '/recipe/[id]', params: { id: existing.id } });
       } else {
         const created = await addRecipe({ ...input, source: 'user' });
         router.replace({ pathname: '/recipe/[id]', params: { id: created.id } });

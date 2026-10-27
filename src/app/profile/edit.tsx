@@ -4,6 +4,7 @@ import { ActivityIndicator, KeyboardAvoidingView, Platform, Pressable, ScrollVie
 import { Avatar } from '../../components/Avatar';
 import { Button } from '../../components/ui';
 import { notify } from '../../lib/confirm';
+import { goBack } from '../../lib/nav';
 import { pickImage, type ImageSource } from '../../lib/images';
 import { useProfile } from '../../lib/profile-context';
 import { radius, space, useTheme } from '../../theme';
@@ -42,7 +43,7 @@ function ProfileForm() {
     setSaving(true);
     try {
       await updateProfile({ name: name.trim(), bio: bio.trim() || undefined, phone: phone.trim() || undefined, avatar });
-      router.back();
+      goBack('/profile');
     } catch {
       notify('مقدرناش نحفظ الملف', 'مساحة التخزين ممكن تكون مليانة.');
     } finally {

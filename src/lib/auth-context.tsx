@@ -19,7 +19,7 @@ type AuthContextValue = {
 
 const AuthContext = createContext<AuthContextValue | null>(null);
 
-type SessionResponse = { token: string; user: { id: string; phone: string } };
+type SessionResponse = { token: string; user: { id: string; phone: string; isAdmin?: boolean } };
 
 export function AuthProvider({ children }: { children: ReactNode }) {
   const [auth, setState] = useState<Auth | null>(null);
@@ -30,6 +30,22 @@ export function AuthProvider({ children }: { children: ReactNode }) {
   useEffect(() => {
     refresh().finally(() => setReady(true));
   }, [refresh]);
+
+  // Admin rights can change on the server: re-check them when the app starts.
+  const token = auth?.token;
+  useEffect(() => {
+    if (!token) return;
+    api<{ user: { isAdmin?: boolean } }>('/api/me')
+      .then(async ({ user }) => {
+        const current = await getAuth();
+        if (current && current.token === token && !!current.isAdmin !== !!user.isAdmin) {
+          const next = { ...current, isAdmin: !!user.isAdmin };
+          await setAuth(next);
+          setState(next);
+        }
+      })
+      .catch(() => refresh());
+  }, [token, refresh]);
 
   // Quiet daily backup while signed in, once the user has backed up at least once.
   const userId = auth?.userId;
@@ -49,7 +65,7 @@ export function AuthProvider({ children }: { children: ReactNode }) {
 
   const verifyCode = useCallback(async (phone: string, code: string) => {
     const res = await api<SessionResponse>('/api/auth/otp/verify', { json: { phone, code }, auth: false });
-    const next = { token: res.token, phone: res.user.phone, userId: res.user.id };
+    const next = { token: res.token, phone: res.user.phone, userId: res.user.id, isAdmin: !!res.user.isAdmin };
     const previous = await getAuth();
     // A different account on this phone must never auto-backup over its own data.
     if (previous?.userId !== next.userId) await clearBackupMeta();

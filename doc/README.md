@@ -21,7 +21,11 @@
 | `src/lib/mealdb.ts` | TheMealDB client, category mapping, pork/alcohol filter |
 | `src/lib/images.ts` | Pick, resize and store recipe photos |
 | `src/lib/recipes-context.tsx` | Recipe state + persistence |
-| `src/data/samples.ts` | Starter recipes shown on first launch |
+| `src/data/starter-recipes.json` | Starter recipes (food, drinks, juices): bundled in the app and seeds the server catalog |
+| `src/data/samples.ts` | Turns the starters into `Recipe`s for first launch / offline |
+| `src/lib/catalog.ts` | Fetch + merge the admin catalog into the device's recipes |
+| `src/app/admin/` | Control panel (admins only): catalog list, add/edit with photos, hide, delete |
+| `server/src/catalog.mjs` | Catalog API + photos |
 | `src/app/(tabs)/profile.tsx` | Profile: info, stats, recently viewed, account/backup card |
 | `src/app/profile/edit.tsx` | Edit name, bio, phone, avatar |
 | `src/app/profile/[section].tsx` | Lists: `added`, `liked`, `rated`, `viewed` |
@@ -53,6 +57,14 @@
 - Views are recorded when a detail screen opens; the last 60 are kept.
 - "ضفتها" = saved recipes whose `source` isn't `sample` (includes internet recipes the user saved).
 - Old `Recipe.favorite` flags are migrated to likes the first time the activity store loads.
+
+## Catalog and control panel
+
+- The server keeps a **catalog** of starter recipes everyone gets. First start seeds it from `starter-recipes.json` (once; deleting them later doesn't re-seed).
+- Admins are phone numbers in `ADMIN_PHONES` (`/opt/darwish-kitchen/otp.env`, or `ADMIN_PHONES=01… bash deploy/update.sh <server>`). `GET /api/me` and login return `isAdmin`; every `/api/admin/*` route checks it server-side.
+- Control panel: `/admin` in the app (web: `https://kitchen.darwish-tech.com/admin`, or "حسابي" → لوحة التحكم). Add/edit recipes, upload/replace/remove a photo, hide (unpublish), delete. Filter "من غير صورة" shows what still needs a photo.
+- Photos: `DATA_DIR/catalog-images/<id>-<random>.jpg`, served publicly from `/api/catalog/images/…` with a 1-year immutable cache (a new upload gets a new name).
+- App sync (`mergeCatalog`), on every app start: adds new catalog recipes; updates starters the user never edited (`customized`) when `updatedAt` changes; removes starters the admin deleted/hid unless edited; never re-adds starters the user deleted (`darwish-kitchen.catalog-dismissed`); ignores an empty response. Catalog photos are remote URLs, so they need internet the first time.
 
 ## Backup server (`server/`)
 
